@@ -6,7 +6,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "lint": "prisma generate && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
