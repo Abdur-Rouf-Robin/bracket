@@ -1,0 +1,26 @@
+{
+  "name": "bracket",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev -w @bracket/api",
+    "dev:web": "npm run dev -w @bracket/web",
+    "dev:web:3002": "npm run dev:3002 -w @bracket/web",
+    "build": "npm run build:packages && npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run prisma:migrate -w @bracket/api",
+    "db:generate": "npm run prisma:generate -w @bracket/api",
+    "build:packages": "npm run build -w @bracket/shared && npm run build -w @bracket/bracket-engine",
+    "smoke": "node apps/api/scripts/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
