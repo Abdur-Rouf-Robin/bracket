@@ -25,27 +25,52 @@ export class GamesService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
-    // Deactivate everything first so legacy rows (e.g. "Badminton Racket") are hidden.
-    await this.prisma.game.updateMany({ data: { active: false } });
+    const existing = await this.prisma.game.findMany({
+      select: { id: true, name: true, category: true, sortOrder: true, active: true },
+    });
+    const byName = new Map(existing.map((row) => [row.name, row]));
+    const seedNames = new Set(SEED_GAMES.map((g) => g.name));
+    const supported = new Set(SUPPORTED_GAME_SEED_NAMES);
+    const writes: Promise<unknown>[] = [];
 
     for (const g of SEED_GAMES) {
-      await this.prisma.game.upsert({
-        where: { name: g.name },
-        create: { ...g, active: true },
-        update: { category: g.category, sortOrder: g.sortOrder, active: true },
-      });
+      const row = byName.get(g.name);
+      if (!row) {
+        writes.push(this.prisma.game.create({ data: { ...g, active: true } }));
+        continue;
+      }
+      if (
+        row.category !== g.category ||
+        row.sortOrder !== g.sortOrder ||
+        !row.active
+      ) {
+        writes.push(
+          this.prisma.game.update({
+            where: { id: row.id },
+            data: { category: g.category, sortOrder: g.sortOrder, active: true },
+          }),
+        );
+      }
     }
 
-    const supported = new Set(SUPPORTED_GAME_SEED_NAMES);
-    const stale = await this.prisma.game.findMany({
-      where: { active: true, name: { notIn: [...supported] } },
-      select: { id: true, name: true },
-    });
-    if (stale.length > 0) {
-      await this.prisma.game.updateMany({
-        where: { id: { in: stale.map((g) => g.id) } },
-        data: { active: false },
-      });
+    const legacy = existing.filter(
+      (row) =>
+        row.active &&
+        !seedNames.has(row.name) &&
+        !supported.has(row.name) &&
+        /racket/i.test(row.name),
+    );
+    if (legacy.length > 0) {
+      writes.push(
+        this.prisma.game.updateMany({
+          where: { id: { in: legacy.map((row) => row.id) } },
+          data: { active: false },
+        }),
+      );
+    }
+
+    if (writes.length > 0) {
+      await Promise.all(writes);
     }
   }
 

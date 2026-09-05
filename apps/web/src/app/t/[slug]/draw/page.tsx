@@ -38,7 +38,9 @@ export default function DrawCeremonyPage() {
   useEffect(() => {
     if (!tournament?.id) return;
     const socket: Socket = io(
-      process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001',
+      process.env.NEXT_PUBLIC_WS_URL ??
+        process.env.NEXT_PUBLIC_API_URL ??
+        'http://localhost:3001',
       { transports: ['websocket'] },
     );
     socket.emit('tournament:join', { tournamentId: tournament.id });

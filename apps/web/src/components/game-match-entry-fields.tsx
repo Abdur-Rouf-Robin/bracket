@@ -1,8 +1,11 @@
 'use client';
 
-import type { MatchEntryMode, MatchMeta } from '@bracket/shared';
+import { summarizeSets, type MatchEntryMode, type MatchMeta } from '@bracket/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+
+export type SetDraft = { home: string; away: string };
 
 export type GameMatchDraft = {
   homeScore: string;
@@ -19,6 +22,8 @@ export type GameMatchDraft = {
   htAwayScore: string;
   homeMapsWon: string;
   awayMapsWon: string;
+  /** Per-set game scores when the tournament uses set-based scoring. */
+  sets: SetDraft[];
 };
 
 export function emptyGameMatchDraft(): GameMatchDraft {
@@ -37,7 +42,20 @@ export function emptyGameMatchDraft(): GameMatchDraft {
     htAwayScore: '',
     homeMapsWon: '',
     awayMapsWon: '',
+    sets: [],
   };
+}
+
+/** Rows with both scores filled, as numbers, ready for `matchResultSchema.sets`. */
+export function setsFromDraft(sets: SetDraft[]): { home: number; away: number }[] {
+  return sets
+    .filter((s) => s.home !== '' && s.away !== '')
+    .map((s) => ({ home: Number(s.home), away: Number(s.away) }))
+    .filter((s) => !Number.isNaN(s.home) && !Number.isNaN(s.away));
+}
+
+export function setDraftsFromMatch(sets: { home: number; away: number }[] | null | undefined): SetDraft[] {
+  return (sets ?? []).map((s) => ({ home: String(s.home), away: String(s.away) }));
 }
 
 type Props = {
@@ -49,6 +67,10 @@ type Props = {
   showEtPen?: boolean;
   knockoutExtraTime?: boolean;
   knockoutPenalties?: boolean;
+  /** settings.setBasedScoring — replaces the plain score inputs with per-set rows. */
+  setBasedScoring?: boolean;
+  /** settings.setsBestOf (3, 5, …) — caps the number of set rows. */
+  setsBestOf?: number | null;
 };
 
 export function GameMatchEntryFields({
@@ -60,12 +82,26 @@ export function GameMatchEntryFields({
   showEtPen,
   knockoutExtraTime,
   knockoutPenalties,
+  setBasedScoring,
+  setsBestOf,
 }: Props) {
   if (mode === 'cricket') {
     return (
       <p className="text-xs text-[var(--color-muted)]">
         Use the cricket scoreboard link above for ball-by-ball scoring.
       </p>
+    );
+  }
+
+  if (setBasedScoring) {
+    return (
+      <SetsEntryFields
+        homeName={homeName}
+        awayName={awayName}
+        sets={draft.sets}
+        bestOf={setsBestOf ?? null}
+        onChange={(sets) => onChange({ sets })}
+      />
     );
   }
 
@@ -200,6 +236,140 @@ export function buildMatchMetaFromDraft(
     return { homeMapsWon: hm, awayMapsWon: am };
   }
   return null;
+}
+
+/**
+ * Per-set score rows (tennis / volleyball / table tennis). Rows can be added up to
+ * `bestOf`; the sets-won tally and validation message update live.
+ */
+export function SetsEntryFields({
+  homeName,
+  awayName,
+  sets,
+  bestOf,
+  onChange,
+}: {
+  homeName: string;
+  awayName: string;
+  sets: SetDraft[];
+  bestOf: number | null;
+  onChange: (sets: SetDraft[]) => void;
+}) {
+  const needed = bestOf && bestOf > 0 ? Math.ceil(bestOf / 2) : null;
+  const rows = sets.length ? sets : [{ home: '', away: '' }];
+  const numeric = setsFromDraft(rows);
+  const summary = numeric.length ? summarizeSets(numeric, bestOf) : null;
+  const decided = summary?.error == null && summary?.winner != null;
+  const canAdd = (bestOf == null || rows.length < bestOf) && !decided;
+
+  const update = (index: number, patch: Partial<SetDraft>) => {
+    const next = rows.map((r, i) => (i === index ? { ...r, ...patch } : r));
+    onChange(next);
+  };
+  const remove = (index: number) => {
+    const next = rows.filter((_, i) => i !== index);
+    onChange(next.length ? next : [{ home: '', away: '' }]);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
+        <span>
+          {bestOf ? `Best of ${bestOf} — first to ${needed} sets` : 'Enter each set score'}
+        </span>
+        <span className="font-semibold tabular-nums text-[var(--color-ink)]">
+          Sets {summary?.homeSetsWon ?? 0}–{summary?.awaySetsWon ?? 0}
+        </span>
+      </div>
+      <div className="grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">
+        <span />
+        <span className="truncate text-center text-[11px] font-semibold">{homeName}</span>
+        <span />
+        <span className="truncate text-center text-[11px] font-semibold">{awayName}</span>
+        <span />
+        {rows.map((row, i) => (
+          <SetRow
+            key={i}
+            index={i}
+            row={row}
+            onChange={(patch) => update(i, patch)}
+            onRemove={rows.length > 1 ? () => remove(i) : undefined}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {canAdd && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onChange([...rows, { home: '', away: '' }])}
+          >
+            + Add set
+          </Button>
+        )}
+        {summary?.error && numeric.length === rows.length && (
+          <span className="text-xs text-amber-700">{summary.error}</span>
+        )}
+        {decided && (
+          <span className="text-xs font-semibold text-emerald-700">
+            {summary!.winner === 'home' ? homeName : awayName} wins the match
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SetRow({
+  index,
+  row,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  row: SetDraft;
+  onChange: (patch: Partial<SetDraft>) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <>
+      <span className="text-[11px] font-semibold text-[var(--color-muted)]">Set {index + 1}</span>
+      <Input
+        type="number"
+        min={0}
+        inputMode="numeric"
+        className="text-center font-bold"
+        value={row.home}
+        onChange={(e) => onChange({ home: e.target.value })}
+        placeholder="0"
+        aria-label={`Set ${index + 1} home score`}
+      />
+      <span className="text-center text-[var(--color-muted)]">–</span>
+      <Input
+        type="number"
+        min={0}
+        inputMode="numeric"
+        className="text-center font-bold"
+        value={row.away}
+        onChange={(e) => onChange({ away: e.target.value })}
+        placeholder="0"
+        aria-label={`Set ${index + 1} away score`}
+      />
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs text-[var(--color-muted)] hover:text-red-600"
+          aria-label={`Remove set ${index + 1}`}
+        >
+          ✕
+        </button>
+      ) : (
+        <span />
+      )}
+    </>
+  );
 }
 
 function ScoreField({

@@ -6,6 +6,10 @@ import { JobsModule } from '../jobs/jobs.module';
 import { MvpModule } from '../mvp/mvp.module';
 import { BracketModule } from '../bracket/bracket.module';
 import { TournamentsModule } from '../tournaments/tournaments.module';
+import { RankingsModule } from '../rankings/rankings.module';
+import { InboxModule } from '../inbox/inbox.module';
+import { MatchCommentsController } from './match-comments.controller';
+import { MatchCommentsService } from './match-comments.service';
 
 @Module({
   imports: [
@@ -14,9 +18,11 @@ import { TournamentsModule } from '../tournaments/tournaments.module';
     MvpModule,
     BracketModule,
     forwardRef(() => TournamentsModule),
+    RankingsModule,
+    InboxModule,
   ],
-  controllers: [MatchesController],
-  providers: [MatchesService],
+  controllers: [MatchesController, MatchCommentsController],
+  providers: [MatchesService, MatchCommentsService],
   exports: [MatchesService],
 })
 export class MatchesModule {}

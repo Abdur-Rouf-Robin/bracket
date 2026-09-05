@@ -1,6 +1,7 @@
 'use client';
 
 import type { Match, Team, Tournament } from '@/lib/types';
+import { formatSets } from '@bracket/bracket-engine';
 import {
   resolveRoundLabel,
   resolveShareCardDisplayMode,
@@ -58,6 +59,7 @@ export type MatchResultData = {
   percentMargin?: number | null;
   totalScore?: number | null;
   status?: string;
+  setsLine?: string | null;
   mvp?: {
     playerName: string;
     teamName: string;
@@ -221,6 +223,7 @@ export function matchToResultData(
     },
     isDraw: m.isDraw,
     isForfeit: m.isForfeit ?? false,
+    setsLine: formatSets(m.sets) || null,
     bestOf,
     legNumber: m.legNumber ?? null,
     attachmentUrl:
@@ -399,6 +402,16 @@ function ScoreBlock({
         </div>
       )}
 
+      {data.setsLine && (
+        <p
+          className={`text-center font-medium tabular-nums text-white/60 ${
+            compact ? 'text-xs' : 'text-sm'
+          }`}
+        >
+          {data.setsLine}
+        </p>
+      )}
+
       {(displayMode === 'percent' || displayMode === 'both') && (
         <div className="space-y-2 px-2">
           <div className="flex h-3 overflow-hidden rounded-full bg-white/10">
@@ -571,6 +584,11 @@ export function MatchResultView({
               {formatTeamScore(data.home)}
               <span className="mx-1 text-[var(--color-muted)]">–</span>
               {formatTeamScore(data.away)}
+            </p>
+          )}
+          {data.setsLine && (
+            <p className="text-[10px] font-medium tabular-nums text-[var(--color-muted)]">
+              {data.setsLine}
             </p>
           )}
           {showPercent && (

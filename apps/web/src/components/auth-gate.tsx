@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from '@/lib/auth';
 
-const PUBLIC_PATHS = ['/login', '/register'];
+const PUBLIC_PATHS = ['/', '/login', '/register'];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -62,15 +62,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }, [loading, user, isPublic, pathname, router]);
 
-  if (loading) {
-    return isPublic ? children : <LoadingScreen />;
-  }
-
-  if (!user && !isPublic) {
+  if (loading && !user && !isPublic) {
     return <LoadingScreen />;
   }
 
-  if (user && (pathname === '/login' || pathname === '/register')) {
+  if (!loading && !user && !isPublic) {
     return <LoadingScreen />;
   }
 

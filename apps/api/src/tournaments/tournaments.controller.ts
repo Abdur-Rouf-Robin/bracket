@@ -15,6 +15,8 @@ import { JwtService } from '@nestjs/jwt';
 import {
   bulkTeamsSchema,
   bracketPredictionSchema,
+  cloneTournamentSchema,
+  copyParticipantsSchema,
   createTournamentSchema,
   generateBracketSchema,
   profileForGameName,
@@ -24,6 +26,8 @@ import {
 } from '@bracket/shared';
 import type {
   BulkTeamsInput,
+  CloneTournamentInput,
+  CopyParticipantsInput,
   CreateTournamentInput,
   GenerateBracketInput,
   TournamentSignupInput,
@@ -169,6 +173,7 @@ export class TournamentsController {
   async getPublic(
     @Param('slug') slug: string,
     @Headers('authorization') auth?: string,
+    @Headers('x-view-token') viewToken?: string,
   ) {
     let userId: string | undefined;
     if (auth?.startsWith('Bearer ')) {
@@ -179,7 +184,7 @@ export class TournamentsController {
         /* public guest */
       }
     }
-    return this.tournaments.getBySlugForUser(slug, userId);
+    return this.tournaments.getBySlugForUser(slug, userId, viewToken ?? null);
   }
 
   @ApiBearerAuth()
@@ -238,5 +243,40 @@ export class TournamentsController {
     @CurrentUser() user?: { id: string } | null,
   ) {
     return this.tournaments.saveBracketPrediction(id, user?.id ?? null, body);
+  }
+
+  // --- Lifecycle tools (sharing workstream) ---------------------------------
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/clone')
+  clone(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(cloneTournamentSchema)) body: CloneTournamentInput,
+  ) {
+    return this.tournaments.clone(id, user.id, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/teams/copy-from/:sourceId')
+  copyParticipants(
+    @Param('id') id: string,
+    @Param('sourceId') sourceId: string,
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(copyParticipantsSchema)) body: CopyParticipantsInput,
+  ) {
+    return this.tournaments.copyParticipants(id, sourceId, user.id, body.mode);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/reopen')
+  reopen(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.tournaments.reopen(id, user.id);
   }
 }

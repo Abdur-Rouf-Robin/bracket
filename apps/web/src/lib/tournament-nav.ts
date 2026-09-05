@@ -4,17 +4,39 @@ export type MainTab =
   | 'players'
   | 'bracket'
   | 'matches'
+  | 'schedule'
   | 'standings'
   | 'stats'
+  | 'registrations'
   | 'settings';
 
 export type TeamsSub = 'participants' | 'rosters' | 'team-settings';
 export type PlayersSub = 'all' | 'by-team' | 'performance' | 'edit';
 export type BracketSub = 'full' | 'knockout';
+export type ScheduleSub = 'calendar' | 'stations' | 'referees' | 'generate' | 'queue';
 export type StatsSub = 'teams' | 'leaderboard' | 'knockout';
-export type SettingsSub = 'venue' | 'rosters' | 'tournament' | 'media' | 'tools';
+export type RegistrationsSub = 'pending' | 'approved' | 'waitlist' | 'rejected' | 'form';
+export type SettingsSub =
+  | 'venue'
+  | 'rosters'
+  | 'tournament'
+  | 'standings'
+  | 'registration'
+  | 'branding'
+  | 'sharing'
+  | 'integrations'
+  | 'media'
+  | 'tools'
+  | 'danger';
 
-export type SubTab = TeamsSub | PlayersSub | BracketSub | StatsSub | SettingsSub;
+export type SubTab =
+  | TeamsSub
+  | PlayersSub
+  | BracketSub
+  | ScheduleSub
+  | StatsSub
+  | RegistrationsSub
+  | SettingsSub;
 
 export function parseTournamentNav(
   searchParams: URLSearchParams,
@@ -45,8 +67,12 @@ function defaultSub(tab: MainTab, mode: 'public' | 'manage'): string {
       return 'all';
     case 'bracket':
       return 'full';
+    case 'schedule':
+      return 'calendar';
     case 'stats':
       return 'teams';
+    case 'registrations':
+      return 'pending';
     case 'settings':
       return mode === 'manage' ? 'venue' : 'participants';
     default:
@@ -113,6 +139,18 @@ export function buildNavItems(opts: {
     playerSubs.push({ id: 'edit', label: 'Edit rosters' });
   }
 
+  const scheduleSubs: { id: string; label: string }[] = [
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'stations', label: 'Stations' },
+    { id: 'queue', label: 'Station queue' },
+  ];
+  if (opts.canManage && opts.mode === 'manage') {
+    scheduleSubs.push(
+      { id: 'referees', label: 'Referees' },
+      { id: 'generate', label: 'Auto-schedule' },
+    );
+  }
+
   const items: NavItem[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'teams', label: 'Teams', subs: teamSubs },
@@ -124,10 +162,11 @@ export function buildNavItems(opts: {
           label: 'Matches',
           subs: [
             { id: 'play', label: 'Play' },
-            { id: 'schedule', label: 'Schedule' },
+            { id: 'schedule', label: 'All matches' },
           ],
         }
       : { id: 'matches', label: 'Matches' },
+    { id: 'schedule', label: 'Schedule', subs: scheduleSubs },
   ];
 
   if (opts.showStandings) {
@@ -137,6 +176,18 @@ export function buildNavItems(opts: {
   items.push({ id: 'stats', label: 'Stats', subs: statsSubs });
 
   if (opts.mode === 'manage' && opts.canManage) {
+    items.push({
+      id: 'registrations',
+      label: 'Registrations',
+      subs: [
+        { id: 'pending', label: 'Pending' },
+        { id: 'approved', label: 'Approved' },
+        { id: 'waitlist', label: 'Waitlist' },
+        { id: 'rejected', label: 'Rejected' },
+        { id: 'form', label: 'Sign-up form' },
+      ],
+    });
+
     const settingsSubs: { id: string; label: string }[] = [
       { id: 'venue', label: 'Venue & hosting' },
       { id: 'rosters', label: 'Edit rosters' },
@@ -144,10 +195,18 @@ export function buildNavItems(opts: {
     if (opts.isOwner) {
       settingsSubs.push(
         { id: 'tournament', label: 'Tournament settings' },
+        { id: 'standings', label: 'Standings & scoring' },
+        { id: 'registration', label: 'Registration' },
+        { id: 'branding', label: 'Branding' },
+        { id: 'sharing', label: 'Sharing & embed' },
+        { id: 'integrations', label: 'Integrations' },
         { id: 'media', label: 'Share images' },
       );
     }
     settingsSubs.push({ id: 'tools', label: 'Tools' });
+    if (opts.isOwner) {
+      settingsSubs.push({ id: 'danger', label: 'Advanced' });
+    }
     items.push({ id: 'settings', label: 'Settings', subs: settingsSubs });
   }
 

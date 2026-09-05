@@ -34,7 +34,13 @@ export interface GeneratedMatch {
   isThirdPlace?: boolean;
   tieId?: string | null;
   legNumber?: number | null;
+  /** Placement / classification match (3rd place, 5th–8th ladder, …). */
+  isPlacement?: boolean;
+  /** Best rank this match decides (3 → 3rd/4th, 5 → 5th/6th, …). */
+  placementRank?: number | null;
 }
+
+export type FormResult = 'W' | 'D' | 'L';
 
 export interface StandingRow {
   teamId: string;
@@ -49,6 +55,15 @@ export interface StandingRow {
   groupId?: string | null;
   fairPlayPoints?: number;
   netRunRate?: number;
+  setsWon?: number;
+  setsLost?: number;
+  /** Sum of manual point adjustments already included in `points`. */
+  adjustments?: number;
+  buchholz?: number;
+  medianBuchholz?: number;
+  sonnebornBerger?: number;
+  /** Last five results, oldest first. */
+  form?: FormResult[];
 }
 
 export interface MatchResultLike {
@@ -61,6 +76,18 @@ export interface MatchResultLike {
   status: string;
   groupId?: string | null;
   isNoResult?: boolean;
+  homeSetsWon?: number | null;
+  awaySetsWon?: number | null;
+}
+
+export interface SetScore {
+  home: number;
+  away: number;
+}
+
+export interface FinalPlacement {
+  teamId: string;
+  rank: number;
 }
 
 export interface PlannedEvent {
@@ -89,4 +116,12 @@ export interface GenerateOptions {
   breakTiesWithPlacement?: boolean;
   doubleElimBracketReset?: boolean;
   knockoutBestOf?: number;
+  /** 0 = none, 3 = third place only, 8 = ranks 3–8, 16 = ranks 3–16. */
+  placementMatchesThrough?: number;
+  /** Route round-1 losers into a separate consolation bracket. */
+  consolationBracket?: boolean;
+  /** Double elimination: teams seeded straight into the losers bracket. */
+  losersStartTeamIds?: string[];
+  /** Force a minimum bracket size (power of two); used for split participants. */
+  minBracketSize?: number;
 }

@@ -105,6 +105,57 @@ export default function NewTournamentPage() {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
 
+  // Community / template support: ?community=<id> attaches the new tournament,
+  // ?template=<id> prefills the wizard from a saved template payload.
+  const [communityId, setCommunityId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateName, setTemplateName] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    setCommunityId(sp.get('community'));
+    setTemplateId(sp.get('template'));
+  }, []);
+  useEffect(() => {
+    if (!token || !templateId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const tpl = await api<{ name: string; payload: Record<string, unknown> }>(
+          `/templates/${templateId}`,
+          { token },
+        );
+        if (cancelled) return;
+        const p = tpl.payload ?? {};
+        setTemplateName(tpl.name);
+        if (typeof p.name === 'string' && p.name) setName(p.name);
+        if (typeof p.description === 'string') setDescription(p.description);
+        if (typeof p.gameId === 'string' && p.gameId) setGameId(p.gameId);
+        if (typeof p.isPublic === 'boolean') setIsPublic(p.isPublic);
+        if (typeof p.pointsWin === 'number') setPointsWin(p.pointsWin);
+        if (typeof p.pointsDraw === 'number') setPointsDraw(p.pointsDraw);
+        if (p.venueType === 'ONLINE' || p.venueType === 'PHYSICAL') setVenueType(p.venueType);
+        if (typeof p.venueName === 'string') setVenueName(p.venueName);
+        if (typeof p.venueAddress === 'string') setVenueAddress(p.venueAddress);
+        if (typeof p.venueUrl === 'string') setVenueUrl(p.venueUrl);
+        if (typeof p.logoUrl === 'string') setLogoUrl(p.logoUrl);
+        if (typeof p.backgroundImageUrl === 'string') setBackgroundImageUrl(p.backgroundImageUrl);
+        if (typeof p.teamCount === 'number' && p.teamCount >= 2) setTeamCount(p.teamCount);
+        if (p.settings && typeof p.settings === 'object') {
+          setSettings({
+            ...DEFAULT_TOURNAMENT_SETTINGS,
+            ...(p.settings as Partial<TournamentSettings>),
+          });
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load template');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, templateId]);
+
   useEffect(() => {
     setTeamNames((prev) =>
       Array.from({ length: teamCount }, (_, i) => prev[i] ?? `Team ${i + 1}`),
@@ -182,6 +233,28 @@ export default function NewTournamentPage() {
     setSettings((s) => ({ ...s, ...partial }));
   }
 
+  const knockoutFormat =
+    settings.stageMode === 'TWO_STAGE'
+      ? settings.finalStageFormat
+      : settings.singleStageFormat;
+  const showPlacementMatches =
+    knockoutFormat === 'SINGLE_ELIMINATION' ||
+    knockoutFormat === 'DOUBLE_ELIMINATION';
+  const showConsolationBracket =
+    (settings.stageMode === 'SINGLE' &&
+      settings.singleStageFormat === 'SINGLE_ELIMINATION') ||
+    settings.stageMode === 'TWO_STAGE';
+  const showSetBasedScoring = !(
+    settings.stageMode === 'SINGLE' &&
+    (settings.singleStageFormat === 'LEADERBOARD' ||
+      settings.singleStageFormat === 'TIME_TRIAL' ||
+      settings.singleStageFormat === 'SINGLE_RACE' ||
+      settings.singleStageFormat === 'GRAND_PRIX')
+  );
+  const isSwissFormat =
+    settings.singleStageFormat === 'SWISS' ||
+    settings.finalStageFormat === 'SWISS';
+
   function onGameChange(id: string) {
     setGameId(id);
     const game = games.find((g) => g.id === id);
@@ -227,6 +300,23 @@ export default function NewTournamentPage() {
             token,
             body: JSON.stringify(body),
           });
+      if (!tournament) {
+        if (communityId) {
+          try {
+            await api(`/communities/${communityId}/tournaments/${t.id}`, { method: 'POST', token });
+            t.communityId = communityId;
+          } catch (err) {
+            setError(
+              `Tournament created, but could not attach to community: ${
+                err instanceof Error ? err.message : 'unknown error'
+              }`,
+            );
+          }
+        }
+        if (templateId) {
+          void api(`/templates/${templateId}/use`, { method: 'POST', token }).catch(() => undefined);
+        }
+      }
       setTournament(t);
       setSlug(t.slug);
       setStep('count');
@@ -395,6 +485,13 @@ export default function NewTournamentPage() {
           {step === 'registration' && 'Registration & advanced'}
           {step === 'teams' && 'Participants'}
         </h1>
+
+        {step === 'basics' && (templateName || communityId) && (
+          <p className="mt-3 text-xs text-[var(--color-muted)]">
+            {templateName ? `Prefilled from template "${templateName}". ` : ''}
+            {communityId ? 'This tournament will be hosted by your community.' : ''}
+          </p>
+        )}
 
         {step === 'basics' && (
           <div className="panel-card mt-8 space-y-4 rounded-2xl p-6">
@@ -757,12 +854,74 @@ export default function NewTournamentPage() {
               />
             </div>
 
+            <div className="panel-card rounded-2xl p-4">
+              <Label>Points for a loss</Label>
+              <Input
+                type="number"
+                min={-10}
+                max={10}
+                className="mt-2"
+                value={settings.pointsLoss}
+                onChange={(e) =>
+                  patchSettings({ pointsLoss: Number(e.target.value) })
+                }
+              />
+              <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+                Applied to the losing side (default 0). Can be negative.
+              </p>
+            </div>
+
             <Toggle
               checked={settings.breakTiesWithPlacement}
-              onChange={(v) => patchSettings({ breakTiesWithPlacement: v })}
+              onChange={(v) =>
+                patchSettings({
+                  breakTiesWithPlacement: v,
+                  placementMatchesThrough: v
+                    ? settings.placementMatchesThrough >= 3
+                      ? settings.placementMatchesThrough
+                      : 3
+                    : 0,
+                })
+              }
               label="Break ties with placement matches"
               hint="Adds a 3rd-place match (international standard)"
             />
+
+            {showPlacementMatches && (
+              <div className="panel-card rounded-2xl p-4">
+                <Label>Placement matches</Label>
+                <Select
+                  className="mt-2"
+                  value={String(settings.placementMatchesThrough ?? 0)}
+                  onChange={(v) => {
+                    const n = Number(v);
+                    patchSettings({
+                      placementMatchesThrough: n,
+                      breakTiesWithPlacement: n >= 3,
+                    });
+                  }}
+                  options={[
+                    { value: '0', label: 'None' },
+                    { value: '3', label: '3rd place' },
+                    { value: '4', label: 'Through 4th' },
+                    { value: '8', label: 'Through 8th' },
+                    { value: '16', label: 'Through 16th' },
+                  ]}
+                />
+                <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+                  Extra matches to decide 3rd place and lower rankings
+                </p>
+              </div>
+            )}
+
+            {showConsolationBracket && (
+              <Toggle
+                checked={settings.consolationBracket}
+                onChange={(v) => patchSettings({ consolationBracket: v })}
+                label="Consolation bracket"
+                hint="Losers of the first knockout round play a separate cup"
+              />
+            )}
 
             <Toggle
               checked={settings.useHeadToHead}
@@ -802,6 +961,33 @@ export default function NewTournamentPage() {
               />
             </div>
 
+            {showSetBasedScoring && (
+              <>
+                <Toggle
+                  checked={settings.setBasedScoring}
+                  onChange={(v) => patchSettings({ setBasedScoring: v })}
+                  label="Set-based scoring"
+                  hint="Tennis, volleyball, padel: enter each set; sets won decide the match"
+                />
+                {settings.setBasedScoring && (
+                  <div className="panel-card rounded-2xl p-4">
+                    <Label>Sets — best of</Label>
+                    <Select
+                      className="mt-2"
+                      value={String(settings.setsBestOf)}
+                      onChange={(v) =>
+                        patchSettings({ setsBestOf: Number(v) })
+                      }
+                      options={[
+                        { value: '3', label: 'Best of 3 (Bo3)' },
+                        { value: '5', label: 'Best of 5 (Bo5)' },
+                      ]}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
             {(settings.singleStageFormat === 'GRAND_PRIX' ||
               settings.singleStageFormat === 'LEADERBOARD') && (
               <div className="panel-card rounded-2xl p-4">
@@ -830,8 +1016,7 @@ export default function NewTournamentPage() {
               </div>
             )}
 
-            {(settings.singleStageFormat === 'SWISS' ||
-              settings.finalStageFormat === 'SWISS') && (
+            {isSwissFormat && (
               <>
               <div className="panel-card rounded-2xl p-4">
                 <Label>Swiss rounds</Label>
@@ -844,6 +1029,41 @@ export default function NewTournamentPage() {
                     patchSettings({ swissRounds: Number(e.target.value) })
                   }
                 />
+              </div>
+              <div className="panel-card rounded-2xl p-4">
+                <Label>Swiss mode</Label>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      [
+                        'CLASSIC',
+                        'Classic',
+                        'Pair round by round from current standings',
+                      ],
+                      [
+                        'POTS',
+                        'Pots',
+                        'Draw every fixture up-front from seeded pots',
+                      ],
+                    ] as const
+                  ).map(([value, label, hint]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => patchSettings({ swissMode: value })}
+                      className={`rounded-xl px-3 py-2 text-left text-sm ${
+                        settings.swissMode === value
+                          ? 'choice-btn-active'
+                          : 'choice-btn'
+                      }`}
+                    >
+                      <span className="block font-medium">{label}</span>
+                      <span className="mt-0.5 block text-[10px] text-[var(--color-muted)]">
+                        {hint}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="panel-card rounded-2xl p-4">
                 <Label>Swiss pairing system</Label>

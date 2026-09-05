@@ -20,14 +20,22 @@ import {
 } from './euro-third-place';
 import { buildInternationalKnockoutPairings } from './pairing-rules';
 import { computeStandingsInternational, type StandingsOptions } from './standings-rules';
+import {
+  addConsolationBracket,
+  addDoubleElimPlacementMatches,
+  addPlacementMatches,
+} from './knockout-extras';
 import type {
   EngineGroup,
   EngineTeam,
+  FinalPlacement,
+  FormResult,
   GeneratedMatch,
   GenerateOptions,
   MatchResultLike,
   PlannedEvent,
   PoolColor,
+  SetScore,
   Shuffleable,
   StandingRow,
 } from './types';
@@ -35,15 +43,43 @@ import type {
 export type {
   EngineGroup,
   EngineTeam,
+  FinalPlacement,
+  FormResult,
   GeneratedMatch,
   GenerateOptions,
   MatchResultLike,
   PlannedEvent,
   PoolColor,
+  SetScore,
   Shuffleable,
   StandingRow,
 };
-export type { StandingsOptions } from './standings-rules';
+export type { StandingsOptions, Criterion } from './standings-rules';
+export {
+  buchholzScore,
+  computeForm,
+  drawLotsOrder,
+  headToHeadPoints,
+  headToHeadTable,
+  medianBuchholzScore,
+  sonnebornBergerScore,
+} from './standings-rules';
+export {
+  addConsolationBracket,
+  addDoubleElimPlacementMatches,
+  addPlacementMatches,
+  computeFinalPlacements,
+  formatSets,
+  isConsolationKey,
+  resolveSetsResult,
+} from './knockout-extras';
+export type {
+  FinalPlacementsResult,
+  PlacementMatchLike,
+  SetsResolution,
+} from './knockout-extras';
+export { generateSwissPots } from './swiss-pots';
+export type { SwissPotsOptions, SwissPotsResult } from './swiss-pots';
 
 function nextPowerOfTwo(n: number): number {
   let p = 1;
@@ -109,7 +145,9 @@ export function generateSingleElimination(
   const sorted = [...teams].sort(
     (a, b) => (a.seed ?? 999) - (b.seed ?? 999),
   );
-  const bracketSize = nextPowerOfTwo(Math.max(2, sorted.length));
+  const bracketSize = nextPowerOfTwo(
+    Math.max(2, sorted.length, options.minBracketSize ?? 0),
+  );
   const slots = seedSlots(bracketSize);
   const seeded: (EngineTeam | null)[] = slots.map((seed) => {
     const team = sorted[seed - 1];
@@ -164,8 +202,17 @@ export function generateSingleElimination(
 
   // Auto-resolve byes into next match pointers conceptually (engine marks isBye)
   let result = matches;
-  if (options.breakTiesWithPlacement) {
-    result = addPlacementThirdMatch(result, 'se');
+  const placementThrough = Math.max(
+    options.placementMatchesThrough ?? 0,
+    options.breakTiesWithPlacement ? 3 : 0,
+  );
+  if (options.consolationBracket) {
+    result = addConsolationBracket(result, 'se');
+  }
+  if (placementThrough >= 3) {
+    result = addPlacementMatches(result, 'se', placementThrough, {
+      skipRound1Losers: !!options.consolationBracket,
+    });
   }
   if (options.knockoutBestOf && options.knockoutBestOf > 1) {
     result = result.map((m) => ({
@@ -185,9 +232,25 @@ export function generateDoubleElimination(
   teams: EngineTeam[],
   options: GenerateOptions = {},
 ): GeneratedMatch[] {
-  const winners = generateSingleElimination(teams, {
+  const losersStartSet = new Set(options.losersStartTeamIds ?? []);
+  const losersStart = [...teams]
+    .filter((t) => losersStartSet.has(t.id))
+    .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
+  const winnersTeams = losersStart.length
+    ? teams.filter((t) => !losersStartSet.has(t.id))
+    : teams;
+  // Split participants: size the winners bracket for everyone so that the
+  // byes' empty loser slots in LB round 1 can host the losers-start teams.
+  const minBracketSize = losersStart.length
+    ? nextPowerOfTwo(Math.max(2, teams.length))
+    : undefined;
+
+  const winners = generateSingleElimination(winnersTeams, {
     ...options,
     breakTiesWithPlacement: false,
+    placementMatchesThrough: 0,
+    consolationBracket: false,
+    minBracketSize,
   }).map((m) => ({
     ...m,
     key: m.key.replace(/^se-/, 'de-w-'),
@@ -252,6 +315,23 @@ export function generateDoubleElimination(
     a.loserNextMatchSlot = 'home';
     b.loserNextMatchKey = key;
     b.loserNextMatchSlot = 'away';
+  }
+
+  // Split participants: losers-start teams take the LB R1 slots whose feeding
+  // WB match is a bye (a bye never produces a loser).
+  if (losersStart.length) {
+    const queue = [...losersStart];
+    for (const lb of losers) {
+      if (!queue.length) break;
+      const homeFeeder = r1.find((m) => m.key === lb.homeFromMatchKey);
+      const awayFeeder = r1.find((m) => m.key === lb.awayFromMatchKey);
+      if (homeFeeder?.isBye && queue.length) {
+        lb.homeTeamId = queue.shift()!.id;
+      }
+      if (awayFeeder?.isBye && queue.length) {
+        lb.awayTeamId = queue.shift()!.id;
+      }
+    }
   }
 
   // Subsequent losers rounds: winner of previous LB vs loser of next WB round
@@ -346,6 +426,9 @@ export function generateDoubleElimination(
   }
   if (options.breakTiesWithPlacement) {
     all = addPlacementThirdMatch(all, 'de');
+  }
+  if ((options.placementMatchesThrough ?? 0) >= 5) {
+    all = addDoubleElimPlacementMatches(all, 'de', options.placementMatchesThrough!);
   }
   if (options.knockoutBestOf && options.knockoutBestOf > 1) {
     all = all.map((m) => ({
@@ -729,6 +812,7 @@ export function expandTwoLeggedKnockout(
       m.bracketSide !== 'GROUP' &&
       m.bracketSide !== 'SWISS' &&
       !m.isThirdPlace &&
+      !m.isPlacement &&
       !m.isResetMatch;
 
     if (!isKnockout) {
@@ -1281,3 +1365,5 @@ export function formatsSupportShareImage(format: string | null | undefined): boo
     format === 'SWISS'
   );
 }
+export * from './elo';
+export * from './scheduler';

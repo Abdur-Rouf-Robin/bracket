@@ -318,6 +318,145 @@ export const tournamentSettingsSchema = z.object({
   seedingMode: z
     .enum(['TRADITIONAL', 'LIST_ORDER'])
     .default('TRADITIONAL'),
+
+  // ---------------------------------------------------------------------
+  // Standings & scoring (Score7 / Challonge parity)
+  // ---------------------------------------------------------------------
+  /** Ordered tiebreak criteria applied after `rankBy`. */
+  standingsCriteria: z
+    .array(
+      z.enum([
+        'POINTS',
+        'WINS',
+        'HEAD_TO_HEAD',
+        'SCORE_DIFF',
+        'SCORE_FOR',
+        'SCORE_AGAINST',
+        'SETS_WON',
+        'SET_DIFF',
+        'GAMES_PLAYED',
+        'BUCHHOLZ',
+        'MEDIAN_BUCHHOLZ',
+        'SONNEBORN_BERGER',
+        'FAIR_PLAY',
+        'NET_RUN_RATE',
+        'DRAW_LOTS',
+      ]),
+    )
+    .default(['POINTS', 'SCORE_DIFF', 'SCORE_FOR', 'HEAD_TO_HEAD']),
+  /** Visible columns in the standings table, in display order. */
+  standingsColumns: z
+    .array(
+      z.enum([
+        'RANK',
+        'TEAM',
+        'PLAYED',
+        'WINS',
+        'DRAWS',
+        'LOSSES',
+        'SCORE_FOR',
+        'SCORE_AGAINST',
+        'SCORE_DIFF',
+        'SETS',
+        'POINTS',
+        'ADJUSTMENTS',
+        'FORM',
+        'NET_RUN_RATE',
+        'BUCHHOLZ',
+        'FAIR_PLAY',
+      ]),
+    )
+    .default([
+      'RANK',
+      'TEAM',
+      'PLAYED',
+      'WINS',
+      'DRAWS',
+      'LOSSES',
+      'SCORE_FOR',
+      'SCORE_AGAINST',
+      'SCORE_DIFF',
+      'POINTS',
+    ]),
+  pointsLoss: z.number().int().min(-10).max(10).default(0),
+  /** Set-based scoring (tennis, volleyball, padel, table tennis). */
+  setBasedScoring: z.boolean().default(false),
+  setsBestOf: z.number().int().min(1).max(9).default(3),
+  /** Placement matches decide ranks 3..N (0 = none, 3 = third-place only). */
+  placementMatchesThrough: z.number().int().min(0).max(16).default(0),
+  /** Cup & consolation: losers of KO round 1 play a separate consolation bracket. */
+  consolationBracket: z.boolean().default(false),
+  /** Swiss: CLASSIC pairs round by round; POTS pre-generates fixtures (UCL style). */
+  swissMode: z.enum(['CLASSIC', 'POTS']).default('CLASSIC'),
+  /** Double elimination: allow some participants to start in the losers bracket. */
+  splitParticipantsStartInLosers: z.boolean().default(false),
+  /** Teams picked to start in the losers bracket (used by generate when the body omits them). */
+  losersStartTeamIds: z.array(z.string()).max(128).optional(),
+  bracketNames: z
+    .object({
+      winners: z.string().max(40).optional(),
+      losers: z.string().max(40).optional(),
+      consolation: z.string().max(40).optional(),
+      final: z.string().max(40).optional(),
+    })
+    .optional()
+    .default({}),
+
+  // ---------------------------------------------------------------------
+  // Registration lifecycle
+  // ---------------------------------------------------------------------
+  signupPagePublic: z.boolean().default(true),
+  autoApproveRegistrations: z.boolean().default(true),
+  waitlistEnabled: z.boolean().default(true),
+  registrationOpensAt: z.string().optional().nullable(),
+  registrationClosesAt: z.string().optional().nullable(),
+  registrationFields: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(32),
+        label: z.string().min(1).max(120),
+        type: z
+          .enum(['text', 'textarea', 'number', 'email', 'phone', 'select', 'checkbox', 'url'])
+          .default('text'),
+        required: z.boolean().default(false),
+        options: z.array(z.string().max(80)).optional(),
+        helpText: z.string().max(240).optional(),
+      }),
+    )
+    .default([]),
+  waiverText: z.string().max(8000).optional().nullable(),
+  entryFeeCents: z.number().int().min(0).max(100000000).default(0),
+  currency: z.string().length(3).default('USD'),
+  checkInOpensMinutesBefore: z.number().int().min(0).max(2880).default(60),
+  collectSkillLevel: z.boolean().default(false),
+  enableMatchComments: z.boolean().default(true),
+  participantConfirmationRequired: z.boolean().default(false),
+
+  // ---------------------------------------------------------------------
+  // Branding, sharing & display
+  // ---------------------------------------------------------------------
+  brandPrimaryColor: z.string().max(16).optional().nullable(),
+  brandSecondaryColor: z.string().max(16).optional().nullable(),
+  hideBranding: z.boolean().default(false),
+  viewPasswordEnabled: z.boolean().default(false),
+  participantAccessPages: z.boolean().default(true),
+  tvDisplayIntervalSeconds: z.number().int().min(5).max(300).default(20),
+  embedTheme: z.enum(['dark', 'light', 'auto']).default('auto'),
+  embedDefaultTab: z.string().max(32).default('bracket'),
+  rulesMarkdown: z.string().max(20000).optional().nullable(),
+  descriptionTranslations: z.record(z.string().max(4000)).optional().default({}),
+  sponsors: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        logoUrl: z.string().max(2048).optional().nullable(),
+        url: z.string().max(2048).optional().nullable(),
+      }),
+    )
+    .default([]),
+  streamUrl: z.string().max(2048).optional().nullable(),
+  socialLinks: z.record(z.string().max(2048)).optional().default({}),
+  prizePool: z.string().max(240).optional().nullable(),
 });
 
 export type TournamentSettings = z.infer<typeof tournamentSettingsSchema>;
@@ -396,6 +535,40 @@ export const tournamentSignupSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+
+export const userRoleSchema = z.enum(['USER', 'ADMIN']);
+
+export const adminCreateUserSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  password: z.string().min(8),
+  role: userRoleSchema.optional().default('USER'),
+});
+
+export const adminUpdateUserSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  role: userRoleSchema.optional(),
+  password: z.string().min(8).optional(),
+});
+
+export const adminUpdateTournamentSchema = z.object({
+  status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED']).optional(),
+  isPublic: z.boolean().optional(),
+});
+
+export const adminCreateGameSchema = z.object({
+  name: z.string().min(1).max(80),
+  category: z.string().min(1).max(40),
+  sortOrder: z.number().int().min(0).max(9999).optional().default(100),
+  active: z.boolean().optional().default(true),
+});
+
+export const adminUpdateGameSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  category: z.string().min(1).max(40).optional(),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+  active: z.boolean().optional(),
 });
 
 export const venueTypeSchema = z.enum(['ONLINE', 'PHYSICAL']);
@@ -498,6 +671,10 @@ export const generateBracketSchema = z.object({
   raceCount: z.number().int().min(1).max(24).optional(),
   eventCount: z.number().int().min(1).max(24).optional(),
   useSavedSettings: z.boolean().optional().default(true),
+  /** Double elimination: teams that start directly in the losers bracket. */
+  losersStartTeamIds: z.array(z.string()).max(128).optional(),
+  placementMatchesThrough: z.number().int().min(0).max(16).optional(),
+  consolationBracket: z.boolean().optional(),
 });
 
 export const matchResultSchema = z.object({
@@ -519,6 +696,11 @@ export const matchResultSchema = z.object({
   mvpPlayerId: z.string().cuid().optional().nullable(),
   playerStats: z.array(playerMatchStatsSchema).optional().default([]),
   matchMeta: matchMetaSchema,
+  /** Set-based scoring: per-set game points, e.g. tennis 6-4 3-6 7-5. */
+  sets: z
+    .array(z.object({ home: z.number().min(0), away: z.number().min(0) }))
+    .max(9)
+    .optional(),
 });
 
 export const matchScheduleSchema = z.object({
@@ -562,6 +744,12 @@ export const eventResultsSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type TournamentSignupInput = z.infer<typeof tournamentSignupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type UserRole = z.infer<typeof userRoleSchema>;
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
+export type AdminUpdateTournamentInput = z.infer<typeof adminUpdateTournamentSchema>;
+export type AdminCreateGameInput = z.infer<typeof adminCreateGameSchema>;
+export type AdminUpdateGameInput = z.infer<typeof adminUpdateGameSchema>;
 export type CreateTournamentInput = z.infer<typeof createTournamentSchema>;
 export type UpdateTournamentInput = z.infer<typeof updateTournamentSchema>;
 export type BulkTeamsInput = z.infer<typeof bulkTeamsSchema>;
@@ -742,3 +930,14 @@ export {
 } from './fair-play';
 
 export type { DrawCeremonyPlan, DrawCeremonyStep } from './draw-ceremony';
+
+// Feature-area contracts. Each file is owned by one workstream — add new
+// schemas/types there rather than in this file.
+export * from './communities';
+export * from './event-hub';
+export * from './scheduling';
+export * from './standings-config';
+export * from './registration';
+export * from './sharing';
+export * from './billing';
+export * from './account';

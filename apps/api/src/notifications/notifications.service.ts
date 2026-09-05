@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { WebhooksService } from '../developer/webhooks.service';
 
 @Injectable()
 export class NotificationsService {
@@ -9,9 +10,11 @@ export class NotificationsService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly webhooks?: WebhooksService,
   ) {}
 
   async dispatch(payload: Record<string, unknown>) {
+    await this.webhooks?.dispatch(payload);
     await this.postWebhook(payload);
     if (payload.type === 'final_results') {
       await this.sendFinalResultsEmail(payload.tournamentId as string);
@@ -116,7 +119,21 @@ export class NotificationsService {
     }
   }
 
-  private async sendEmail(to: string, subject: string, html: string) {
+  /** Minimal HTML email layout shared by transactional emails. */
+  emailLayout(title: string, bodyHtml: string, cta?: { label: string; url: string }) {
+    const button = cta
+      ? `<p style="margin:24px 0"><a href="${cta.url}" style="display:inline-block;padding:10px 18px;background:#26bbff;color:#041018;border-radius:6px;font-weight:600;text-decoration:none">${cta.label}</a></p><p style="font-size:12px;color:#888">If the button does not work, copy this link: <br/><a href="${cta.url}">${cta.url}</a></p>`
+      : '';
+    return `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111"><h2 style="margin:0 0 12px">${title}</h2>${bodyHtml}${button}<hr style="border:none;border-top:1px solid #eee;margin:24px 0"/><p style="font-size:12px;color:#888">Sent by Bracket.</p></div>`;
+  }
+
+  /** Public base URL of the web app (for links in emails). */
+  appUrl(): string {
+    return (this.config.get<string>('APP_URL') ?? 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  /** Send a transactional email via Resend (dry-run logs when no API key). */
+  async sendEmail(to: string, subject: string, html: string) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     const from = this.config.get<string>('EMAIL_FROM') ?? 'Bracket <onboarding@resend.dev>';
 

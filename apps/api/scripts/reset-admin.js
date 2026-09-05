@@ -7,8 +7,8 @@ async function main() {
   for (const email of ['admin@example.com', 'admin@bracket.local']) {
     const u = await p.user.upsert({
       where: { email },
-      create: { email, name: 'Admin', passwordHash: hash },
-      update: { passwordHash: hash },
+      create: { email, name: 'Admin', passwordHash: hash, role: 'ADMIN' },
+      update: { passwordHash: hash, role: 'ADMIN' },
     });
     console.log('ok', u.email);
   }

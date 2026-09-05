@@ -4,8 +4,28 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { GitBranch, MoreHorizontal, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { SiteHeader } from '@/components/site-header';
+import { SiteFooter } from '@/components/site-footer';
+import { TournamentHero, TournamentStageStepper } from '@/components/tournament-hero';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ShareMatchCard } from '@/components/share-match-card';
 import { ShareImagesModal } from '@/components/share-images/share-image-cards';
 import { TournamentSectionNav } from '@/components/tournament-section-nav';
@@ -31,6 +51,7 @@ export default function ManageTournamentPage() {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [eventKey, setEventKey] = useState('');
   const [eventValues, setEventValues] = useState<Record<string, string>>({});
   const [sharePayload, setSharePayload] = useState<ShareCardPayload | null>(null);

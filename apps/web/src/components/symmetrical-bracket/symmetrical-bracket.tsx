@@ -32,8 +32,9 @@ function winnerTeam(m: Match): Team | null | undefined {
   );
 }
 
-function MatchNode({ node }: { node: LayoutMatch }) {
+function MatchNode({ node, showSeeds }: { node: LayoutMatch; showSeeds: boolean }) {
   const { match: m, compact } = node;
+  const bestOf = m.bestOf && m.bestOf > 1 ? m.bestOf : null;
 
   if (compact) {
     const w = winnerTeam(m);
@@ -56,17 +57,23 @@ function MatchNode({ node }: { node: LayoutMatch }) {
 
   return (
     <div
-      className="overflow-hidden rounded border border-[#2a3140] bg-[#12151c] shadow-sm"
+      className="relative overflow-hidden rounded border border-[#2a3140] bg-[#12151c] shadow-sm"
       style={{ width: '100%', height: '100%' }}
+      title={bestOf ? `Best of ${bestOf}` : undefined}
     >
+      {bestOf && (
+        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 rounded bg-[#1a1f2a] px-1 text-[8px] font-bold text-[#38bdf8]">
+          Bo{bestOf}
+        </span>
+      )}
       <div
         className={`flex items-center justify-between gap-1 border-b border-[#2a3140] px-2 py-1 ${
           isWinner(m, 'home') ? 'bg-emerald-500/15' : ''
         }`}
       >
-        <TeamBadge team={teamLabel(m, 'home')} size="sm" />
+        <TeamBadge team={teamLabel(m, 'home')} size="sm" showSeed={showSeeds} />
         {m.status === 'COMPLETED' && (
-          <span className="shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5]">
+          <span className={`shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5] ${bestOf ? 'mr-6' : ''}`}>
             {m.homeScore ?? 0}
           </span>
         )}
@@ -76,9 +83,9 @@ function MatchNode({ node }: { node: LayoutMatch }) {
           isWinner(m, 'away') ? 'bg-emerald-500/15' : ''
         }`}
       >
-        <TeamBadge team={teamLabel(m, 'away')} size="sm" />
+        <TeamBadge team={teamLabel(m, 'away')} size="sm" showSeed={showSeeds} />
         {m.status === 'COMPLETED' && (
-          <span className="shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5]">
+          <span className={`shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5] ${bestOf ? 'mr-6' : ''}`}>
             {m.awayScore ?? 0}
           </span>
         )}
@@ -90,9 +97,11 @@ function MatchNode({ node }: { node: LayoutMatch }) {
 function RoundHeaders({
   layout,
   roundLabels,
+  finalLabel,
 }: {
   layout: NonNullable<ReturnType<typeof computeBracketLayout>>;
   roundLabels?: Record<string, string>;
+  finalLabel?: string;
 }) {
   const { totalRounds } = layout;
   const leftCols = totalRounds - 1;
@@ -109,7 +118,10 @@ function RoundHeaders({
     });
   }
   headers.push({
-    label: defaultRoundLabel(totalRounds, totalRounds, roundLabels),
+    label:
+      roundLabels?.[String(totalRounds)] ??
+      finalLabel ??
+      defaultRoundLabel(totalRounds, totalRounds, roundLabels),
     x: centerX,
   });
 
@@ -133,18 +145,38 @@ export function SymmetricalBracket({
   exportId,
   showHeader = true,
   showFooter = true,
+  title,
+  championLabel,
+  hideThirdPlace = false,
 }: {
   tournament: Tournament;
   exportId?: string;
   showHeader?: boolean;
   showFooter?: boolean;
+  /** Overrides the "Knockout bracket" eyebrow (e.g. settings.bracketNames.winners). */
+  title?: string;
+  /** Footer label for the winner (e.g. "Consolation champion"). */
+  championLabel?: string;
+  /** Do not draw the 3rd-place box under the tree (rendered elsewhere). */
+  hideThirdPlace?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const settings = tournament.settings as
-    | { roundLabels?: Record<string, string>; showCustomRoundLabels?: boolean }
+    | {
+        roundLabels?: Record<string, string>;
+        showCustomRoundLabels?: boolean;
+        hideSeedNumbers?: boolean;
+        knockoutBestOf?: number;
+        bracketNames?: { winners?: string; final?: string };
+      }
     | undefined;
   const roundLabels =
     settings?.showCustomRoundLabels ? settings.roundLabels : undefined;
+  const showSeeds = settings?.hideSeedNumbers !== true;
+  const bestOf = settings?.knockoutBestOf && settings.knockoutBestOf > 1 ? settings.knockoutBestOf : null;
+  const headerTitle =
+    title ?? (settings?.bracketNames?.winners?.trim() || 'Knockout bracket');
+  const finalLabel = settings?.bracketNames?.final?.trim() || undefined;
 
   const layout = useMemo(
     () => computeBracketLayout(tournament.matches),
@@ -152,8 +184,8 @@ export function SymmetricalBracket({
   );
 
   const thirdPlace = useMemo(
-    () => getThirdPlaceMatch(tournament.matches),
-    [tournament.matches],
+    () => (hideThirdPlace ? undefined : getThirdPlaceMatch(tournament.matches)),
+    [tournament.matches, hideThirdPlace],
   );
 
   const champion = useMemo(
@@ -186,7 +218,12 @@ export function SymmetricalBracket({
           {showHeader && (
             <div className="mb-3 border-b border-[#2a3140] pb-3 text-center">
               <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#38bdf8]">
-                Knockout bracket
+                {headerTitle}
+                {bestOf && (
+                  <span className="ml-2 rounded border border-[#38bdf8]/40 px-1.5 py-0.5 text-[9px] tracking-normal">
+                    Bo{bestOf}
+                  </span>
+                )}
               </p>
               <h3 className="font-display text-lg font-bold text-white">
                 {tournament.name}
@@ -206,7 +243,7 @@ export function SymmetricalBracket({
             }}
           >
             <div className="relative" style={{ height: layout.height }}>
-              <RoundHeaders layout={layout} roundLabels={roundLabels} />
+              <RoundHeaders layout={layout} roundLabels={roundLabels} finalLabel={finalLabel} />
 
               <svg
                 className="pointer-events-none absolute left-0"
@@ -236,7 +273,7 @@ export function SymmetricalBracket({
                     height: node.height,
                   }}
                 >
-                  <MatchNode node={node} />
+                  <MatchNode node={node} showSeeds={showSeeds} />
                 </div>
               ))}
             </div>
@@ -254,8 +291,20 @@ export function SymmetricalBracket({
                   3rd place
                 </p>
                 <div className="space-y-1">
-                  <TeamBadge team={teamLabel(thirdPlace, 'home')} size="sm" />
-                  <TeamBadge team={teamLabel(thirdPlace, 'away')} size="sm" />
+                  {(['home', 'away'] as const).map((side) => (
+                    <div key={side} className="flex items-center justify-between gap-1">
+                      <TeamBadge team={teamLabel(thirdPlace, side)} size="sm" showSeed={showSeeds} />
+                      {thirdPlace.status === 'COMPLETED' && (
+                        <span
+                          className={`text-[10px] font-bold tabular-nums ${
+                            isWinner(thirdPlace, side) ? 'text-emerald-400' : 'text-[#9aa3b5]'
+                          }`}
+                        >
+                          {side === 'home' ? thirdPlace.homeScore ?? 0 : thirdPlace.awayScore ?? 0}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -264,7 +313,7 @@ export function SymmetricalBracket({
           {showFooter && (
             <div className="mt-2 border-t border-[#2a3140] pt-4 text-center">
               <p className="text-xs uppercase tracking-widest text-[#9aa3b5]">
-                {champion ? 'Champion' : 'Winner'}
+                {championLabel ?? (champion ? 'Champion' : 'Winner')}
               </p>
               <p className="font-display text-2xl font-bold text-[#38bdf8]">
                 {champion?.name ?? 'TBD'}

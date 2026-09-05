@@ -1,27 +1,40 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Suspense, useActionState } from 'react';
-import { loginAction, type LoginActionState } from '@/app/login/actions';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useState } from 'react';
 import { SiteHeader } from '@/components/site-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/lib/auth';
 
-function LoginForm() {
-  const searchParams = useSearchParams();
-  const next = searchParams.get('next') ?? '/';
-  const [state, formAction, pending] = useActionState<LoginActionState, FormData>(
-    loginAction,
-    {},
-  );
+function LoginForm({ next }: { next: string }) {
+  const { login } = useAuth();
+  const router = useRouter();
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    setPending(true);
+    const fd = new FormData(e.currentTarget);
+    const destination = next.startsWith('/') ? next : '/';
+    try {
+      await login(String(fd.get('email') ?? '').trim(), String(fd.get('password') ?? ''));
+      router.replace(destination);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <>
       <h1 className="font-display text-3xl font-bold">Sign in</h1>
-      <form action={formAction} className="mt-8 space-y-4">
-        <input type="hidden" name="next" value={next} />
+      <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <div>
           <Label htmlFor="email">Email</Label>
           <Input
@@ -29,13 +42,20 @@ function LoginForm() {
             name="email"
             type="email"
             autoComplete="username"
-            placeholder="admin@example.com"
-            defaultValue="admin@example.com"
+            placeholder="you@example.com"
             required
           />
         </div>
         <div>
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              href="/forgot-password"
+              className="mb-1 text-xs text-[var(--color-accent)] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             name="password"
@@ -44,17 +64,14 @@ function LoginForm() {
             required
           />
         </div>
-        {state.error && (
-          <p className="text-sm text-[var(--color-danger)]">{state.error}</p>
+        {error && (
+          <p className="text-sm text-[var(--color-danger)]">{error}</p>
         )}
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
       <p className="mt-4 text-sm text-[var(--color-muted)]">
-        Demo: <code>admin@example.com</code> / <code>password123</code>
-      </p>
-      <p className="mt-2 text-sm text-[var(--color-muted)]">
         No account?{' '}
         <Link href="/register" className="text-[var(--color-accent)]">
           Register
@@ -64,13 +81,19 @@ function LoginForm() {
   );
 }
 
+function LoginFormFromQuery() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next') ?? '/';
+  return <LoginForm next={next} />;
+}
+
 export default function LoginPage() {
   return (
     <div className="min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-md px-6 py-16">
-        <Suspense fallback={<p className="text-[var(--color-muted)]">Loading…</p>}>
-          <LoginForm />
+        <Suspense fallback={<LoginForm next="/" />}>
+          <LoginFormFromQuery />
         </Suspense>
       </main>
     </div>

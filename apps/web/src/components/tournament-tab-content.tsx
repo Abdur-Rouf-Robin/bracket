@@ -20,6 +20,14 @@ import { TournamentSettingsPanel } from '@/components/tournament-settings-panel'
 import { TournamentMediaPanel } from '@/components/tournament-media-panel';
 import { TournamentToolsPanel } from '@/components/tournament-tools-panel';
 import { SymmetricalBracket } from '@/components/symmetrical-bracket/symmetrical-bracket';
+import { ScheduleTab } from '@/components/schedule/schedule-tab';
+import { RegistrationsTab } from '@/components/registrations/registrations-tab';
+import { StandingsSettingsPanel } from '@/components/standings/standings-settings-panel';
+import { RegistrationSettingsPanel } from '@/components/registrations/registration-settings-panel';
+import { BrandingPanel } from '@/components/sharing/branding-panel';
+import { SharingPanel } from '@/components/sharing/sharing-panel';
+import { IntegrationsPanel } from '@/components/developer/integrations-panel';
+import { DangerZonePanel } from '@/components/settings/danger-zone-panel';
 import type { MainTab } from '@/lib/tournament-nav';
 import { hasKnockoutPhase, knockoutMatches } from '@/lib/tournament-stats';
 import type { Tournament } from '@/lib/types';
@@ -313,6 +321,27 @@ export function TournamentTabContent({
       return scheduleView;
     }
 
+    case 'schedule':
+      return (
+        <ScheduleTab
+          tournament={tournament}
+          token={entryToken}
+          mode={mode}
+          sub={sub || 'calendar'}
+        />
+      );
+
+    case 'registrations':
+      if (mode !== 'manage' || !token || !tournament.canManage) return null;
+      return (
+        <RegistrationsTab
+          tournament={tournament}
+          token={token}
+          mode={mode}
+          sub={sub || 'pending'}
+        />
+      );
+
     case 'standings':
       if (!showStandings) {
         return (
@@ -352,6 +381,60 @@ export function TournamentTabContent({
         case 'media':
           return tournament.isOwner ? (
             <TournamentMediaPanel tournament={tournament} token={token} />
+          ) : null;
+        case 'standings':
+          return tournament.isOwner ? (
+            <StandingsSettingsPanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
+          ) : null;
+        case 'registration':
+          return tournament.isOwner ? (
+            <RegistrationSettingsPanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
+          ) : null;
+        case 'branding':
+          return tournament.isOwner ? (
+            <BrandingPanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
+          ) : null;
+        case 'sharing':
+          return tournament.isOwner ? (
+            <SharingPanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
+          ) : null;
+        case 'integrations':
+          return tournament.isOwner ? (
+            <IntegrationsPanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
+          ) : null;
+        case 'danger':
+          return tournament.isOwner ? (
+            <DangerZonePanel
+              tournament={tournament}
+              token={token}
+              mode={mode}
+              sub={sub}
+            />
           ) : null;
         case 'tools':
           return (

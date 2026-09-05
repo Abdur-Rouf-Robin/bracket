@@ -1,10 +1,19 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 
 import { MatchStatus, TournamentFormat, TournamentStatus } from '@prisma/client';
 
 import {
 
   computeEventStandings,
+
+  computeFinalPlacements,
 
   computeFreeForAllStandings,
 
@@ -218,66 +227,123 @@ export class StandingsService {
 
           : undefined;
 
+      const adjustmentRows = await this.prisma.standingAdjustment.findMany({
+        where: { tournamentId },
+      });
+      const adjustments = new Map<string, number>();
+      for (const a of adjustmentRows) {
+        adjustments.set(a.teamId, (adjustments.get(a.teamId) ?? 0) + a.points);
+      }
+
+      // Chronological order matters for the form column; byes are not results.
+      const leagueMatches = tournament.matches
+        .filter((m) => !m.isBye)
+        .sort((a, b) => a.round - b.round || a.position - b.position);
+
       rows = computeStandings(
-
         tournament.teams.map((t) => ({
-
           id: t.id,
-
           name: t.name,
-
           groupId: t.groupId,
-
           fairPlayPoints: t.fairPlayPoints,
-
         })),
-
-        tournament.matches.map((m) => ({
-
+        leagueMatches.map((m) => ({
           homeTeamId: m.homeTeamId,
-
           awayTeamId: m.awayTeamId,
-
           homeScore: m.homeScore,
-
           awayScore: m.awayScore,
-
           winnerTeamId: m.winnerTeamId,
-
           isDraw: m.isDraw,
-
           isNoResult: m.isNoResult,
-
           status: m.status,
-
           groupId: m.groupId,
-
+          homeSetsWon: m.homeSetsWon,
+          awaySetsWon: m.awaySetsWon,
         })),
-
         tournament.pointsWin,
-
         tournament.pointsDraw,
-
         {
-
           rankBy: settings.rankBy as RankBy,
-
+          pointsLoss: settings.pointsLoss ?? 0,
+          criteria: settings.standingsCriteria?.length
+            ? settings.standingsCriteria
+            : undefined,
+          adjustments,
           useHeadToHead: settings.useHeadToHead,
-
           enableToss: settings.enableToss,
-
           useBuchholz: settings.useBuchholzSwiss,
-
           useFairPlay: settings.useFairPlayTiebreaker,
-
           tossSeed: tournamentId,
-
           netRunRateByTeam,
-
         },
-
       );
 
+      // Knockout formats: once the bracket has a champion, rank by placement.
+      const knockoutFormats: TournamentFormat[] = [
+        TournamentFormat.SINGLE_ELIMINATION,
+        TournamentFormat.DOUBLE_ELIMINATION,
+      ];
+      const isGroupsKo =
+        tournament.format === TournamentFormat.GROUPS_KNOCKOUT &&
+        tournament.matches.some(
+          (m) => m.bracketSide !== 'GROUP' && m.key.startsWith('gk-'),
+        );
+      if (
+        tournament.format &&
+        (knockoutFormats.includes(tournament.format) || isGroupsKo)
+      ) {
+        const koMatches = tournament.matches.filter(
+          (m) => !isGroupsKo || m.bracketSide !== 'GROUP',
+        );
+        const koTeamIds = isGroupsKo
+          ? [
+              ...new Set(
+                koMatches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter(
+                  (id): id is string => !!id,
+                ),
+              ),
+            ]
+          : tournament.teams.map((t) => t.id);
+        if (koTeamIds.length) {
+          const placements = computeFinalPlacements({
+            format: tournament.format,
+            teamIds: koTeamIds,
+            matches: koMatches.map((m) => ({
+              key: m.key,
+              round: m.round,
+              bracketSide: m.bracketSide,
+              status: m.status,
+              homeTeamId: m.homeTeamId,
+              awayTeamId: m.awayTeamId,
+              winnerTeamId: m.winnerTeamId,
+              isBye: m.isBye,
+              isDraw: m.isDraw,
+              isPlacement: m.isPlacement,
+              placementRank: m.placementRank,
+              legNumber: m.legNumber,
+            })),
+          });
+          if (placements.championTeamId) {
+            const rankByTeam = new Map(
+              placements.placements.map((p) => [p.teamId, p.rank]),
+            );
+            if (isGroupsKo) {
+              // Knockout teams rank ahead of everyone eliminated in the groups.
+              const koCount = koTeamIds.length;
+              const rest = rows
+                .filter((r) => !rankByTeam.has(r.teamId))
+                .sort((a, b) => a.rank - b.rank || b.points - a.points);
+              rest.forEach((r, i) => {
+                r.rank = koCount + i + 1;
+              });
+            }
+            for (const r of rows) {
+              const rank = rankByTeam.get(r.teamId);
+              if (rank != null) r.rank = rank;
+            }
+          }
+        }
+      }
     }
 
 
@@ -315,6 +381,16 @@ export class StandingsService {
             rank: r.rank,
 
             netRunRate: r.netRunRate ?? null,
+
+            setsWon: r.setsWon ?? 0,
+
+            setsLost: r.setsLost ?? 0,
+
+            adjustments: r.adjustments ?? 0,
+
+            buchholz: r.buchholz ?? null,
+
+            sonnebornBerger: r.sonnebornBerger ?? null,
 
           })),
 
@@ -378,29 +454,32 @@ export class StandingsService {
 
     });
 
-    if (!tournament || tournament.format !== TournamentFormat.SWISS) return;
+    if (!tournament || tournament.format !== TournamentFormat.SWISS) return false;
 
     const swissSettings = tournamentSettingsSchema.parse(tournament.settings ?? {});
 
+    // POTS mode pre-generates every round at bracket generation time.
+    if (swissSettings.swissMode === 'POTS') return false;
+
     const maxRound = Math.max(0, ...tournament.matches.map((m) => m.round));
 
-    if (maxRound >= tournament.swissRounds) return;
+    if (maxRound >= tournament.swissRounds) return false;
 
 
 
     const current = tournament.matches.filter((m) => m.round === maxRound);
 
-    if (!current.length) return;
+    if (!current.length) return false;
 
     if (!current.every((m) => m.status === MatchStatus.COMPLETED || m.isBye)) {
 
-      return;
+      return false;
 
     }
 
 
 
-    if (tournament.matches.some((m) => m.round === maxRound + 1)) return;
+    if (tournament.matches.some((m) => m.round === maxRound + 1)) return false;
 
 
 
@@ -562,6 +641,90 @@ export class StandingsService {
 
     this.logger.log(`Swiss round ${maxRound + 1} created for ${tournamentId}`);
 
+    this.realtime.emitBracketUpdated(tournamentId);
+
+    return true;
+
+  }
+
+  /** Classic Swiss: explicitly generate the next round (used by the manager endpoint). */
+  async generateNextSwissRound(tournamentId: string) {
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: { matches: true },
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+    if (tournament.format !== TournamentFormat.SWISS) {
+      throw new BadRequestException('Tournament is not a Swiss tournament');
+    }
+    const settings = tournamentSettingsSchema.parse(tournament.settings ?? {});
+    if (settings.swissMode === 'POTS') {
+      throw new BadRequestException('All rounds are already drawn in pots mode');
+    }
+    const maxRound = Math.max(0, ...tournament.matches.map((m) => m.round));
+    if (maxRound >= tournament.swissRounds) {
+      throw new BadRequestException('All Swiss rounds have been generated');
+    }
+    const current = tournament.matches.filter((m) => m.round === maxRound);
+    if (current.some((m) => m.status !== MatchStatus.COMPLETED && !m.isBye)) {
+      throw new BadRequestException(
+        `Round ${maxRound} still has unfinished matches`,
+      );
+    }
+    const created = await this.maybeAdvanceSwiss(tournamentId);
+    return { created, round: created ? maxRound + 1 : maxRound };
+  }
+
+  // ---------------------------------------------------------------------
+  // Manual standings adjustments
+  // ---------------------------------------------------------------------
+
+  listAdjustments(tournamentId: string) {
+    return this.prisma.standingAdjustment.findMany({
+      where: { tournamentId },
+      include: {
+        team: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addAdjustment(
+    tournamentId: string,
+    userId: string,
+    input: { teamId: string; groupId?: string | null; points: number; reason: string },
+  ) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: input.teamId, tournamentId },
+    });
+    if (!team) throw new NotFoundException('Team not found in this tournament');
+    const created = await this.prisma.standingAdjustment.create({
+      data: {
+        tournamentId,
+        teamId: input.teamId,
+        groupId: input.groupId ?? team.groupId ?? null,
+        points: input.points,
+        reason: input.reason.trim(),
+        createdById: userId,
+      },
+      include: {
+        team: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+    });
+    await this.recompute(tournamentId);
+    return created;
+  }
+
+  async removeAdjustment(tournamentId: string, adjustmentId: string) {
+    const existing = await this.prisma.standingAdjustment.findFirst({
+      where: { id: adjustmentId, tournamentId },
+    });
+    if (!existing) throw new NotFoundException('Adjustment not found');
+    await this.prisma.standingAdjustment.delete({ where: { id: adjustmentId } });
+    await this.recompute(tournamentId);
+    return { ok: true };
   }
 
 

@@ -40,18 +40,29 @@ const HEADER_H = 28;
 const FOOTER_H = 72;
 const CENTER_GAP = 48;
 
-function isThirdPlace(m: Match) {
-  return m.key.includes('3rd');
+export function isThirdPlace(m: Match) {
+  return m.key.includes('3rd') || m.placementRank === 3;
 }
 
-function isGrandFinalReset(m: Match) {
+/** Any classification match (3rd place, 5th–8th ladder, …). */
+export function isPlacementMatch(m: Match) {
+  return !!m.isPlacement || isThirdPlace(m) || m.key.includes('-pl-');
+}
+
+/** Cup & consolation bracket for round-1 losers. */
+export function isConsolationMatch(m: Match) {
+  return m.key.includes('cons-');
+}
+
+export function isGrandFinalReset(m: Match) {
   return m.key.includes('gf-reset');
 }
 
 export function filterSymmetricalMatches(matches: Match[]): Match[] {
   return matches.filter(
     (m) =>
-      !isThirdPlace(m) &&
+      !isPlacementMatch(m) &&
+      !isConsolationMatch(m) &&
       !isGrandFinalReset(m) &&
       (m.bracketSide === 'WINNERS' || m.bracketSide === 'FINAL'),
   );
@@ -59,6 +70,54 @@ export function filterSymmetricalMatches(matches: Match[]): Match[] {
 
 export function getThirdPlaceMatch(matches: Match[]): Match | undefined {
   return matches.find(isThirdPlace);
+}
+
+/** Placement matches other than the 3rd-place match, grouped by the rank range they decide. */
+export function getPlacementLadders(
+  matches: Match[],
+): { rank: number; label: string; matches: Match[] }[] {
+  const ladders = new Map<number, Match[]>();
+  for (const m of matches) {
+    if (!isPlacementMatch(m) || isThirdPlace(m)) continue;
+    const rank = m.placementRank ?? Number(m.key.match(/-pl-(\d+)/)?.[1] ?? 0);
+    if (!rank) continue;
+    if (!ladders.has(rank)) ladders.set(rank, []);
+    ladders.get(rank)!.push(m);
+  }
+  return [...ladders.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([rank, list]) => {
+      const sorted = [...list].sort((a, b) => a.round - b.round || a.position - b.position);
+      const decides = sorted.filter((m) => /(?:^|-)(3rd|pl-\d+)$/.test(m.key));
+      const lastRank = decides.length
+        ? Math.max(...decides.map((m) => (m.placementRank ?? rank) + 1))
+        : rank + 1;
+      return {
+        rank,
+        label: lastRank > rank + 1 ? `${ordinal(rank)}–${ordinal(lastRank)} place` : `${ordinal(rank)} place`,
+        matches: sorted,
+      };
+    });
+}
+
+export function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+/** Consolation bracket matches as a standalone tree (keys remapped so the layout treats round 1 as WINNERS). */
+export function consolationAsTree(matches: Match[]): Match[] {
+  const cons = matches.filter(isConsolationMatch);
+  if (!cons.length) return [];
+  const maxRound = Math.max(...cons.map((m) => m.round));
+  return cons.map((m) => ({
+    ...m,
+    key: m.key.replace('cons-', 'ctree-'),
+    isPlacement: false,
+    placementRank: null,
+    bracketSide: m.round === maxRound && maxRound > 1 ? 'FINAL' : 'WINNERS',
+  }));
 }
 
 function wingFor(round: number, position: number, round1Count: number): Wing {
@@ -218,8 +277,25 @@ export function findChampion(
   matches: Match[],
   teams: { id: string; name: string }[],
 ): { id: string; name: string } | null {
+  const grandFinals = matches
+    .filter((m) => m.bracketSide === 'GRAND_FINAL')
+    .sort((a, b) => a.round - b.round);
+  if (grandFinals.length) {
+    const reset = grandFinals.find(isGrandFinalReset);
+    const gf = grandFinals.find((m) => !isGrandFinalReset(m));
+    const decisive =
+      reset && reset.status === 'COMPLETED' && reset.homeTeamId && reset.awayTeamId
+        ? reset
+        : gf;
+    if (decisive?.status !== 'COMPLETED' || !decisive.winnerTeamId) return null;
+    return teams.find((t) => t.id === decisive.winnerTeamId) ?? null;
+  }
   const final = matches.find(
-    (m) => m.bracketSide === 'FINAL' && !isThirdPlace(m) && m.status === 'COMPLETED',
+    (m) =>
+      m.bracketSide === 'FINAL' &&
+      !isPlacementMatch(m) &&
+      !isConsolationMatch(m) &&
+      m.status === 'COMPLETED',
   );
   if (!final?.winnerTeamId) return null;
   const team = teams.find((t) => t.id === final.winnerTeamId);

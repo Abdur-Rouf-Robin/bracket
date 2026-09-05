@@ -367,6 +367,9 @@ export function addPlacementThirdMatch(
     awayFromMatchKey: semis[1].key,
     homeTeamId: null,
     awayTeamId: null,
+    isPlacement: true,
+    placementRank: 3,
+    isThirdPlace: true,
   };
 
   semis[0].loserNextMatchKey = thirdKey;

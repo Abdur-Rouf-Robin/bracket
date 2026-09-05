@@ -1,6 +1,14 @@
 'use client';
 
-import { formatShareDateTime, resolveRoundLabel, resolveGameProfile, type GameProfile, type MatchEntryMode, type TournamentSettings } from '@bracket/shared';
+import {
+  formatShareDateTime,
+  resolveRoundLabel,
+  resolveGameProfile,
+  summarizeSets,
+  type GameProfile,
+  type MatchEntryMode,
+  type TournamentSettings,
+} from '@bracket/shared';
 
 import { useMemo, useState } from 'react';
 import { CricketMatchEntryOptions } from '@/components/cricket-match-entry-options';
@@ -22,6 +30,8 @@ import type { Match, Tournament } from '@/lib/types';
 import {
   buildMatchMetaFromDraft,
   GameMatchEntryFields,
+  setDraftsFromMatch,
+  setsFromDraft,
   type GameMatchDraft,
 } from '@/components/game-match-entry-fields';
 
@@ -63,6 +73,7 @@ function defaultDraft(m: Match): MatchDraft {
     htAwayScore: meta?.htAwayScore != null ? String(meta.htAwayScore) : '',
     homeMapsWon: meta?.homeMapsWon != null ? String(meta.homeMapsWon) : '',
     awayMapsWon: meta?.awayMapsWon != null ? String(meta.awayMapsWon) : '',
+    sets: setDraftsFromMatch(m.sets),
   };
 }
 

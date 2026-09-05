@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { MatchStatus } from '@prisma/client';
+import { MatchStatus, Prisma } from '@prisma/client';
 import {
+  resolveSetsResult,
   resolveSingleLegKnockoutTie,
   resolveTwoLeggedTie,
   resolveWinnerTeamId,
@@ -23,9 +25,12 @@ import { JobsService } from '../jobs/jobs.service';
 import { MvpService } from '../mvp/mvp.service';
 import { TournamentsService } from '../tournaments/tournaments.service';
 import { BracketRepairService } from '../bracket/bracket-repair.service';
+import { RankingsService } from '../rankings/rankings.service';
 
 @Injectable()
 export class MatchesService {
+  private readonly rankingsLogger = new Logger(MatchesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
@@ -33,6 +38,7 @@ export class MatchesService {
     private readonly mvp: MvpService,
     private readonly tournaments: TournamentsService,
     private readonly bracketRepair: BracketRepairService,
+    private readonly rankings: RankingsService,
   ) {}
 
   async setResult(matchId: string, userId: string, input: MatchResultInput) {
@@ -122,7 +128,41 @@ export class MatchesService {
       (match.tournament.format === 'GROUPS_KNOCKOUT' &&
         match.bracketSide !== 'GROUP');
 
-    if (isKnockoutMatch && bestOf > 1 && !input.winnersOnly && !input.isForfeit) {
+    // Set-based scoring (tennis / volleyball style): the sets decide the match,
+    // homeScore/awayScore become sets won and the per-set games are kept in `sets`.
+    let setData: {
+      sets: { home: number; away: number }[];
+      homeSetsWon: number;
+      awaySetsWon: number;
+    } | null = null;
+    const useSets =
+      settings.setBasedScoring &&
+      !input.winnersOnly &&
+      !input.isForfeit &&
+      !input.isNoResult;
+    if (useSets) {
+      if (!input.sets?.length) {
+        throw new BadRequestException(
+          'This tournament uses set-based scoring — enter the score of each set',
+        );
+      }
+      const setsResolved = resolveSetsResult(input.sets, settings.setsBestOf);
+      if (!setsResolved.valid) {
+        throw new BadRequestException(setsResolved.message ?? 'Invalid set scores');
+      }
+      homeScore = setsResolved.homeSetsWon;
+      awayScore = setsResolved.awaySetsWon;
+      winnerTeamId =
+        setsResolved.winner === 'home' ? match.homeTeamId : match.awayTeamId;
+      isDraw = false;
+      setData = {
+        sets: input.sets,
+        homeSetsWon: setsResolved.homeSetsWon,
+        awaySetsWon: setsResolved.awaySetsWon,
+      };
+    }
+
+    if (isKnockoutMatch && bestOf > 1 && !input.winnersOnly && !input.isForfeit && !useSets) {
       const check = validateSeriesResult({
         homeScore: homeScore,
         awayScore: awayScore,
@@ -230,6 +270,13 @@ export class MatchesService {
         penHomeScore: input.penHomeScore ?? null,
         penAwayScore: input.penAwayScore ?? null,
         matchMeta: input.matchMeta ?? undefined,
+        sets: setData
+          ? setData.sets
+          : input.sets?.length
+            ? input.sets
+            : Prisma.DbNull,
+        homeSetsWon: setData?.homeSetsWon ?? null,
+        awaySetsWon: setData?.awaySetsWon ?? null,
         status: MatchStatus.COMPLETED,
       },
       include: {
@@ -238,6 +285,12 @@ export class MatchesService {
         winnerTeam: true,
       },
     });
+
+    try {
+      await this.rankings.onMatchCompleted(matchId);
+    } catch (e) {
+      this.rankingsLogger.warn(`Ranking update failed for match ${matchId}: ${(e as Error).message}`);
+    }
 
     let advanceWinnerId = resolved.winnerTeamId;
 
@@ -427,6 +480,9 @@ export class MatchesService {
         winnerTeamId: null,
         isDraw: false,
         isForfeit: false,
+        sets: Prisma.DbNull,
+        homeSetsWon: null,
+        awaySetsWon: null,
         status:
           match.homeTeamId && match.awayTeamId
             ? MatchStatus.READY
@@ -482,12 +538,26 @@ export class MatchesService {
       include: { tournament: true },
     });
     if (!match) throw new NotFoundException('Match not found');
-    await this.tournaments.requireManage(match.tournamentId, userId);
     const settings = tournamentSettingsSchema.parse(
       match.tournament.settings ?? {},
     );
     if (!settings.allowMatchAttachments) {
       throw new BadRequestException('Match attachments are disabled');
+    }
+    try {
+      await this.tournaments.requireManage(match.tournamentId, userId);
+    } catch {
+      const teamIds = [match.homeTeamId, match.awayTeamId].filter(
+        (id): id is string => !!id,
+      );
+      const onTeam = await this.prisma.team.findFirst({
+        where: {
+          tournamentId: match.tournamentId,
+          registeredByUserId: userId,
+          id: { in: teamIds },
+        },
+      });
+      if (!onTeam) throw new ForbiddenException();
     }
     return this.prisma.match.update({
       where: { id: matchId },

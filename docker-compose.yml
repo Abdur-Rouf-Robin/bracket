@@ -1,5 +1,10 @@
+# Optional local/dev only. Production uses a native Postgres cluster:
+#   18/bracket on 127.0.0.1:5433  (NOT VMS 5432, NOT Anemi 5434)
+# Do not `docker compose up` on this server in production — it would fight
+# the native cluster on 5433.
 services:
   postgres:
+    profiles: ["dev"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -7,9 +12,9 @@ services:
       POSTGRES_PASSWORD: bracket
       POSTGRES_DB: bracket
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - bracket_pg:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bracket -d bracket"]
       interval: 5s
@@ -17,13 +22,14 @@ services:
       retries: 10
 
   redis:
+    profiles: ["dev"]
     image: redis:7-alpine
     restart: unless-stopped
-    # Host 6380 avoids clashing with other local Redis on 6379
+    # Host 6380 avoids clashing with VMS Redis 6379 and Anemi 6381
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
-      - redis_data:/data
+      - bracket_redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,5 +37,5 @@ services:
       retries: 10
 
 volumes:
-  postgres_data:
-  redis_data:
+  bracket_pg:
+  bracket_redis:

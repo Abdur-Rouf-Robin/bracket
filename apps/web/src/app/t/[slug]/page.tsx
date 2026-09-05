@@ -1,22 +1,28 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TournamentSeo } from '@/components/tournament-seo';
 import { SiteHeader } from '@/components/site-header';
-import { Button } from '@/components/ui/button';
+import { SiteFooter } from '@/components/site-footer';
+import { AdSlot } from '@/components/ads/ad-slot';
+import { TournamentHero } from '@/components/tournament-hero';
+import { TournamentPasswordGate } from '@/components/tournament-password-gate';
+import { tournamentBrandStyle } from '@/components/sharing/brand-style';
 import { TournamentSectionNav } from '@/components/tournament-section-nav';
 import { TournamentTabContent } from '@/components/tournament-tab-content';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Tournament } from '@/lib/types';
 import type { TournamentMvpRow } from '@bracket/shared';
-import { formatShareDateTime, formatVenue } from '@bracket/shared';
 import { buildNavItems, parseTournamentNav } from '@/lib/tournament-nav';
 import { hasKnockoutPhase } from '@/lib/tournament-stats';
 import { useTournamentLive } from '@/lib/use-tournament-live';
-import { useState } from 'react';
+import { SearchX } from 'lucide-react';
+import Link from 'next/link';
 
 export default function PublicTournamentPage() {
   const params = useParams<{ slug: string }>();
@@ -24,8 +30,6 @@ export default function PublicTournamentPage() {
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
   const qc = useQueryClient();
-  const [copied, setCopied] = useState(false);
-  const [embedCopied, setEmbedCopied] = useState(false);
   const basePath = `/t/${slug}`;
 
   const { data, isLoading, error } = useQuery({
@@ -70,107 +74,69 @@ export default function PublicTournamentPage() {
       })
     : [];
 
-  async function copyLink() {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
+  const checkInSelf = async () => {
+    if (!token) return;
+    await api(`/t/${slug}/check-in`, {
+      method: 'POST',
+      token,
+    });
+    await qc.invalidateQueries({
+      queryKey: ['tournament', slug],
+    });
+  };
 
-  async function copyEmbed() {
-    const origin =
-      typeof window !== 'undefined' ? window.location.origin : '';
-    const code = `<iframe src="${origin}/t/${slug}/embed" width="100%" height="480" frameborder="0" title="${data?.name ?? 'Bracket'}"></iframe>`;
-    await navigator.clipboard.writeText(code);
-    setEmbedCopied(true);
-    setTimeout(() => setEmbedCopied(false), 1500);
-  }
+  // Viewer owns a participant entry that hasn't checked in yet.
+  const canCheckIn =
+    !!user &&
+    !!data &&
+    data.status !== 'COMPLETED' &&
+    (data.teams ?? []).some(
+      (t) => t.registeredByUserId === user.id && !t.checkedIn && !t.withdrawn,
+    );
+
+  const showAds = data?.viewerPlan !== 'PREMIER';
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col" style={tournamentBrandStyle(data)}>
       <TournamentSeo slug={slug} />
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-6 py-10">
-        {isLoading && <p className="text-[var(--color-muted)]">Loading…</p>}
+      <main className="container-page flex-1 py-6 md:py-8">
+        {isLoading && (
+          <div className="space-y-4" aria-busy="true">
+            <Skeleton className="h-52 w-full rounded-2xl" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        )}
         {error && (
-          <p className="text-red-700">
-            {error instanceof Error ? error.message : 'Not found'}
-          </p>
+          <EmptyState
+            icon={SearchX}
+            title="Tournament not found"
+            description={error instanceof Error ? error.message : 'This tournament may be private or was removed.'}
+            action={
+              <Button variant="secondary" asChild>
+                <Link href="/browse">Browse tournaments</Link>
+              </Button>
+            }
+          />
         )}
         {data && (
-          <>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-sm uppercase tracking-wide text-[var(--color-muted)]">
-                  Tournament
-                  {data.game?.name ? ` · ${data.game.name}` : ''}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="font-display text-4xl font-bold">{data.name}</h1>
-                  {(data.settings as { tentative?: boolean } | undefined)
-                    ?.tentative && (
-                    <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                      Tentative schedule
-                    </span>
-                  )}
-                </div>
-                {data.description && (
-                  <p className="mt-2 max-w-2xl text-[var(--color-muted)]">
-                    {data.description}
-                  </p>
-                )}
-                {(data.startAt || formatVenue(data)) && (
-                  <p className="mt-2 text-sm text-[var(--color-muted)]">
-                    {data.startAt && (
-                      <span>{formatShareDateTime(data.startAt)}</span>
-                    )}
-                    {data.startAt && formatVenue(data) ? ' · ' : ''}
-                    {formatVenue(data) && <span>{formatVenue(data)}</span>}
-                  </p>
-                )}
-                <p className="mt-1 text-[var(--color-muted)]">
-                  {data.format?.replaceAll('_', ' ') ?? 'Draft'} · {data.status}
-                  {' · '}
-                  <span className="font-mono text-xs">/t/{data.slug}</span>
-                  <span
-                    className={`ml-2 inline-flex items-center gap-1 ${
-                      connected
-                        ? 'text-[var(--color-ok)]'
-                        : 'text-[var(--color-muted)]'
-                    }`}
-                  >
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        connected
-                          ? 'animate-pulse bg-[var(--color-ok)]'
-                          : 'bg-[var(--color-muted)]'
-                      }`}
-                    />
-                    {connected ? 'Live' : 'Offline'}
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link href={`/t/${data.slug}/bracket`}>
-                  <Button variant="secondary">Full bracket page</Button>
-                </Link>
-                {registrationOpen && (
-                  <Link href={`/t/${data.slug}/register`}>
-                    <Button>Register</Button>
-                  </Link>
-                )}
-                <Button variant="secondary" type="button" onClick={copyLink}>
-                  {copied ? 'Copied' : 'Share link'}
-                </Button>
-                <Button variant="secondary" type="button" onClick={copyEmbed}>
-                  {embedCopied ? 'Embed copied' : 'Embed code'}
-                </Button>
-                {data.canManage && (
-                  <Link href={`/t/${data.slug}?tab=matches&sub=play`}>
-                    <Button>Enter results</Button>
-                  </Link>
-                )}
-              </div>
-            </div>
+          <TournamentPasswordGate tournament={data}>
+            <TournamentHero
+              tournament={data}
+              mode="public"
+              connected={connected}
+              registrationOpen={registrationOpen}
+              canCheckIn={canCheckIn}
+              onCheckIn={checkInSelf}
+              actions={
+                data.canManage ? (
+                  <Button size="sm" asChild>
+                    <Link href={`/t/${data.slug}?tab=matches&sub=play`}>Enter results</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
 
             <TournamentSectionNav
               basePath={basePath}
@@ -179,31 +145,30 @@ export default function PublicTournamentPage() {
               activeSub={sub}
             />
 
-            <div className="mt-6">
-              <TournamentTabContent
-                tournament={data}
-                tab={tab}
-                sub={sub}
-                mode="public"
-                basePath={basePath}
-                mvpRows={mvpRows}
-                token={token ?? undefined}
-                userId={user?.id}
-                onCheckInSelf={async () => {
-                  if (!token) return;
-                  await api(`/t/${slug}/check-in`, {
-                    method: 'POST',
-                    token,
-                  });
-                  await qc.invalidateQueries({
-                    queryKey: ['tournament', slug],
-                  });
-                }}
-              />
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_auto]">
+              <div className="min-w-0">
+                <TournamentTabContent
+                  tournament={data}
+                  tab={tab}
+                  sub={sub}
+                  mode="public"
+                  basePath={basePath}
+                  mvpRows={mvpRows}
+                  token={token ?? undefined}
+                  userId={user?.id}
+                  onCheckInSelf={checkInSelf}
+                />
+              </div>
+              {showAds && process.env.NEXT_PUBLIC_ADS_ENABLED === 'true' && (
+                <div className="no-print hidden xl:block xl:w-[300px]">
+                  <AdSlot plan={data.viewerPlan ?? 'FREE'} className="sticky top-32" />
+                </div>
+              )}
             </div>
-          </>
+          </TournamentPasswordGate>
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }

@@ -92,18 +92,574 @@ enum CricketInningsEndReason {
   ABANDONED
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PREMIER
+}
+
+enum CommunityRole {
+  OWNER
+  ADMIN
+  COLLABORATOR
+  AFFILIATE
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLISTED
+  WITHDRAWN
+}
+
+enum PaymentStatus {
+  FREE
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum StationStatus {
+  OPEN
+  IN_USE
+  CLOSED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
 model User {
-  id           String            @id @default(cuid())
-  email        String            @unique
-  passwordHash String
-  name         String
-  emailVerified Boolean          @default(false)
-  countryCode  String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  tournaments  Tournament[]      @relation("OwnedTournaments")
-  adminOf      TournamentAdmin[]
+  id            String            @id @default(cuid())
+  email         String            @unique
+  passwordHash  String
+  name          String
+  username      String?           @unique
+  avatarUrl     String?
+  bio           String?
+  timezone      String            @default("UTC")
+  locale        String            @default("en")
+  plan          Plan              @default(FREE)
+  planExpiresAt DateTime?
+  stripeCustomerId String?        @unique
+  role          UserRole          @default(USER)
+  emailVerified Boolean           @default(false)
+  emailVerifiedAt DateTime?
+  lastLoginAt   DateTime?
+  countryCode   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  tournaments   Tournament[]      @relation("OwnedTournaments")
+  adminOf       TournamentAdmin[]
   announcements Announcement[]
+  ownedCommunities Community[]    @relation("OwnedCommunities")
+  communityMemberships CommunityMember[]
+  communityFollows CommunityFollow[]
+  communityAnnouncements CommunityAnnouncement[]
+  ownedEvents   Event[]           @relation("OwnedEvents")
+  eventAdminOf  EventAdmin[]
+  eventOrders   EventOrder[]
+  templates     TournamentTemplate[]
+  registrations Registration[]
+  matchComments MatchComment[]
+  standingAdjustments StandingAdjustment[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+  notifications Notification[]
+  rankingEntries RankingEntry[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  subscription  Subscription?
+  refereeProfiles Referee[]
+
+  @@index([role])
+  @@index([plan])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                 Plan               @default(PREMIER)
+  status               SubscriptionStatus @default(ACTIVE)
+  interval             String             @default("month")
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyPrefix  String
+  keyHash    String    @unique
+  scopes     String[]  @default([])
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Webhook {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tournamentId String?
+  tournament   Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  communityId  String?
+  community    Community?  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  url          String
+  secret       String
+  events       String[]    @default([])
+  isActive     Boolean     @default(true)
+  lastStatus   Int?
+  lastSentAt   DateTime?
+  failureCount Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([tournamentId])
+  @@index([communityId])
+}
+
+// ---------------------------------------------------------------------------
+// Communities (Challonge-style hubs)
+// ---------------------------------------------------------------------------
+
+model Community {
+  id            String                  @id @default(cuid())
+  slug          String                  @unique
+  name          String
+  description   String?
+  logoUrl       String?
+  bannerUrl     String?
+  websiteUrl    String?
+  location      String?
+  countryCode   String?
+  audience      String[]                @default([])
+  socials       Json                    @default("{}")
+  isPro         Boolean                 @default(false)
+  isPublic      Boolean                 @default(true)
+  ownerId       String
+  owner         User                    @relation("OwnedCommunities", fields: [ownerId], references: [id])
+  members       CommunityMember[]
+  followers     CommunityFollow[]
+  games         CommunityGame[]
+  announcements CommunityAnnouncement[]
+  tournaments   Tournament[]
+  events        Event[]
+  rankings      Ranking[]
+  templates     TournamentTemplate[]
+  webhooks      Webhook[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([ownerId])
+  @@index([isPublic])
+}
+
+model CommunityMember {
+  id          String        @id @default(cuid())
+  communityId String
+  community   Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        CommunityRole @default(AFFILIATE)
+  createdAt   DateTime      @default(now())
+
+  @@unique([communityId, userId])
+  @@index([userId])
+}
+
+model CommunityFollow {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([communityId, userId])
+  @@index([userId])
+}
+
+model CommunityGame {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  gameId      String
+  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, gameId])
+}
+
+model CommunityAnnouncement {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  title       String
+  body        String
+  pinned      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([communityId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Rankings (Elo) — community-scoped
+// ---------------------------------------------------------------------------
+
+model Ranking {
+  id               String          @id @default(cuid())
+  communityId      String
+  community        Community       @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  gameId           String?
+  game             Game?           @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  startAt          DateTime?
+  endAt            DateTime?
+  startingRating   Int             @default(1500)
+  kFactorNew       Int             @default(40)
+  kFactorNormal    Int             @default(20)
+  kFactorPro       Int             @default(10)
+  newPlayerMatches Int             @default(10)
+  proThreshold     Int             @default(2000)
+  isActive         Boolean         @default(true)
+  entries          RankingEntry[]
+  history          RatingHistory[]
+  tournaments      Tournament[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([communityId])
+}
+
+model RankingEntry {
+  id            String          @id @default(cuid())
+  rankingId     String
+  ranking       Ranking         @relation(fields: [rankingId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName   String
+  rating        Float
+  peakRating    Float
+  wins          Int             @default(0)
+  losses        Int             @default(0)
+  draws         Int             @default(0)
+  matchesPlayed Int             @default(0)
+  lastPlayedAt  DateTime?
+  history       RatingHistory[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([rankingId, userId])
+  @@unique([rankingId, displayName])
+  @@index([rankingId, rating])
+}
+
+model RatingHistory {
+  id           String       @id @default(cuid())
+  rankingId    String
+  ranking      Ranking      @relation(fields: [rankingId], references: [id], onDelete: Cascade)
+  entryId      String
+  entry        RankingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  matchId      String?
+  tournamentId String?
+  opponentName String?
+  result       String
+  delta        Float
+  ratingAfter  Float
+  createdAt    DateTime     @default(now())
+
+  @@index([entryId, createdAt])
+  @@index([rankingId, matchId])
+}
+
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
+
+model TournamentTemplate {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  communityId String?
+  community   Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  payload     Json       @default("{}")
+  usageCount  Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([ownerId])
+  @@index([communityId])
+}
+
+// ---------------------------------------------------------------------------
+// Events (multi-tournament hubs with ticketing)
+// ---------------------------------------------------------------------------
+
+model Event {
+  id           String        @id @default(cuid())
+  slug         String        @unique
+  name         String
+  description  String?
+  logoUrl      String?
+  bannerUrl    String?
+  startAt      DateTime?
+  endAt        DateTime?
+  timezone     String        @default("UTC")
+  venueType    String?
+  venueName    String?
+  venueAddress String?
+  venueUrl     String?
+  streamUrl    String?
+  isPublished  Boolean       @default(false)
+  isPublic     Boolean       @default(true)
+  ownerId      String
+  owner        User          @relation("OwnedEvents", fields: [ownerId], references: [id])
+  communityId  String?
+  community    Community?    @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  tournaments  Tournament[]
+  tickets      EventTicket[]
+  orders       EventOrder[]
+  admins       EventAdmin[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([ownerId])
+  @@index([communityId])
+  @@index([isPublished, startAt])
+}
+
+model EventAdmin {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
+
+model EventTicket {
+  id           String       @id @default(cuid())
+  eventId      String
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  priceCents   Int          @default(0)
+  currency     String       @default("USD")
+  quantity     Int?
+  salesStartAt DateTime?
+  salesEndAt   DateTime?
+  isActive     Boolean      @default(true)
+  order        Int          @default(0)
+  orders       EventOrder[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([eventId])
+}
+
+model EventOrder {
+  id              String      @id @default(cuid())
+  code            String      @unique
+  eventId         String
+  event           Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketId        String
+  ticket          EventTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  buyerName       String
+  buyerEmail      String
+  quantity        Int         @default(1)
+  amountCents     Int         @default(0)
+  currency        String      @default("USD")
+  status          OrderStatus @default(PENDING)
+  stripeSessionId String?     @unique
+  checkedInAt     DateTime?
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([eventId, status])
+  @@index([buyerEmail])
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling — stations / venues, referees
+// ---------------------------------------------------------------------------
+
+model Station {
+  id             String        @id @default(cuid())
+  tournamentId   String
+  tournament     Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  name           String
+  privateDetails String?
+  status         StationStatus @default(OPEN)
+  order          Int           @default(0)
+  matches        Match[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([tournamentId, name])
+  @@index([tournamentId, order])
+}
+
+model Referee {
+  id              String     @id @default(cuid())
+  tournamentId    String
+  tournament      Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  email           String?
+  accessTokenHash String?    @unique
+  availability    Json       @default("[]")
+  order           Int        @default(0)
+  matches         Match[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([tournamentId])
+}
+
+// ---------------------------------------------------------------------------
+// Registration lifecycle
+// ---------------------------------------------------------------------------
+
+model Registration {
+  id               String             @id @default(cuid())
+  tournamentId     String
+  tournament       Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId           String?
+  user             User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  teamId           String?            @unique
+  team             Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  teamName         String
+  players          Json               @default("[]")
+  email            String?
+  phone            String?
+  countryCode      String?
+  skillLevel       String?
+  customFields     Json               @default("{}")
+  waiverAcceptedAt DateTime?
+  status           RegistrationStatus @default(PENDING)
+  waitlistPosition Int?
+  paymentStatus    PaymentStatus      @default(FREE)
+  amountCents      Int                @default(0)
+  currency         String             @default("USD")
+  stripeSessionId  String?            @unique
+  notes            String?
+  reviewedAt       DateTime?
+  reviewedById     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([tournamentId, status])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Match discussion + standings adjustments
+// ---------------------------------------------------------------------------
+
+model MatchComment {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([matchId, createdAt])
+}
+
+model StandingAdjustment {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  groupId      String?
+  points       Int
+  reason       String
+  createdById  String
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@index([tournamentId, teamId])
 }
 
 model Game {
@@ -112,9 +668,13 @@ model Game {
   category    String
   active      Boolean      @default(true)
   sortOrder   Int          @default(0)
+  slug        String?      @unique
+  iconUrl     String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   tournaments Tournament[]
+  communities CommunityGame[]
+  rankings    Ranking[]
 }
 
 model Tournament {
@@ -142,6 +702,17 @@ model Tournament {
   backgroundImageUrl String?
   logoUrl            String?
   settings        Json              @default("{}")
+  scheduleConfig  Json              @default("{}")
+  timezone        String            @default("UTC")
+  viewPasswordHash String?
+  communityId     String?
+  community       Community?        @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  eventId         String?
+  event           Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  rankingId       String?
+  ranking         Ranking?          @relation(fields: [rankingId], references: [id], onDelete: SetNull)
+  startedAt       DateTime?
+  completedAt     DateTime?
   createdById     String
   createdBy       User              @relation(fields: [createdById], references: [id], "OwnedTournaments")
   createdAt       DateTime          @default(now())
@@ -154,10 +725,18 @@ model Tournament {
   announcements   Announcement[]
   admins          TournamentAdmin[]
   predictions     BracketPrediction[]
+  stations        Station[]
+  referees        Referee[]
+  registrations   Registration[]
+  standingAdjustments StandingAdjustment[]
+  webhooks        Webhook[]
 
   @@index([createdById])
   @@index([gameId])
   @@index([status])
+  @@index([communityId])
+  @@index([eventId])
+  @@index([isPublic, status, startAt])
 }
 
 model Group {
@@ -189,6 +768,9 @@ model Team {
   checkedInAt  DateTime?
   fairPlayPoints Int     @default(0)
   registeredByUserId String?
+  withdrawn    Boolean   @default(false)
+  withdrawnAt  DateTime?
+  accessTokenHash String? @unique
   createdAt    DateTime     @default(now())
   homeMatches  Match[]      @relation("HomeTeam")
   awayMatches  Match[]      @relation("AwayTeam")
@@ -197,6 +779,8 @@ model Team {
   eventResults EventResult[]
   players      TeamPlayer[]
   matchPlayerStats MatchPlayerStat[]
+  registration Registration?
+  standingAdjustments StandingAdjustment[]
 
   @@index([tournamentId])
 }
@@ -285,12 +869,25 @@ model Match {
   attachmentUrl      String?
   attachmentName     String?
   scheduledAt        DateTime?
+  durationMinutes    Int?
   station            String?
+  stationId          String?
+  stationRef         Station?    @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  refereeId          String?
+  referee            Referee?    @relation(fields: [refereeId], references: [id], onDelete: SetNull)
+  sets               Json?
+  homeSetsWon        Int?
+  awaySetsWon        Int?
+  isPlacement        Boolean     @default(false)
+  placementRank      Int?
+  reportedByUserId   String?
+  reportedAt         DateTime?
   mvpPlayerId        String?
   matchMeta          Json?
   mvpPlayer          TeamPlayer?        @relation("MatchMvp", fields: [mvpPlayerId], references: [id], onDelete: SetNull)
   playerStats        MatchPlayerStat[]
   votes              MatchVote[]
+  comments           MatchComment[]
   cricketMatch       CricketMatch?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
@@ -299,6 +896,9 @@ model Match {
   @@index([tournamentId, status])
   @@index([tournamentId, bracketSide, round])
   @@index([tournamentId, groupId])
+  @@index([tournamentId, scheduledAt])
+  @@index([stationId])
+  @@index([refereeId])
 }
 
 model Standing {
@@ -318,6 +918,11 @@ model Standing {
   points        Int        @default(0)
   rank          Int        @default(0)
   netRunRate    Float?
+  setsWon       Int        @default(0)
+  setsLost      Int        @default(0)
+  adjustments   Int        @default(0)
+  buchholz      Float?
+  sonnebornBerger Float?
 
   @@unique([tournamentId, teamId])
   @@index([tournamentId, groupId])

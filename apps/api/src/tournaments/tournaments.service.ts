@@ -17,16 +17,17 @@ import {
   expandTwoLeggedGroup,
   expandTwoLeggedKnockout,
   generateDoubleElimination,
-  generateGroupsKnockout,
   generateRoundRobin,
   generateSingleElimination,
   generateSwiss,
+  generateSwissPots,
   planFreeForAll,
   planGrandPrix,
   planLeaderboard,
   planSingleRace,
   planTimeTrial,
   suggestFormats,
+  type EngineTeam,
   type GeneratedMatch,
   type PlannedEvent,
 } from '@bracket/bracket-engine';
@@ -45,11 +46,14 @@ import {
   suggestFormatPlans,
   tournamentSettingsSchema,
 } from '@bracket/shared';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { JobsService } from '../jobs/jobs.service';
 import { BracketRepairService } from '../bracket/bracket-repair.service';
+import { AccessService } from '../common/access.service';
 import { canUseBracketPredictions, validatePredictionCustomFields } from './bracket-prediction-policy';
+import { verifyViewToken } from '../exports/view-token.util';
 
 @Injectable()
 export class TournamentsService {
@@ -58,6 +62,8 @@ export class TournamentsService {
     private readonly realtime: RealtimeGateway,
     private readonly jobs: JobsService,
     private readonly bracketRepair: BracketRepairService,
+    private readonly access: AccessService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(userId: string, input: CreateTournamentInput) {
@@ -139,6 +145,17 @@ export class TournamentsService {
     if (t.status !== TournamentStatus.DRAFT && t.matches.length > 0) {
       throw new BadRequestException(
         'Cannot change teams after bracket is generated',
+      );
+    }
+
+    const plan = await this.access.userPlan(userId);
+    const max =
+      plan === 'PREMIER'
+        ? Number(this.config.get('PREMIER_MAX_PARTICIPANTS') ?? 512)
+        : Number(this.config.get('FREE_MAX_PARTICIPANTS') ?? 256);
+    if (input.teams.length > max) {
+      throw new BadRequestException(
+        `Your ${plan === 'PREMIER' ? 'Premier' : 'Standard'} plan allows up to ${max} participants. Upgrade to add more.`,
       );
     }
 
@@ -249,6 +266,12 @@ export class TournamentsService {
       ...(input.swissRounds != null ? { swissRounds: input.swissRounds } : {}),
       ...(input.raceCount != null ? { raceCount: input.raceCount } : {}),
       ...(input.eventCount != null ? { eventCount: input.eventCount } : {}),
+      ...(input.placementMatchesThrough != null
+        ? { placementMatchesThrough: input.placementMatchesThrough }
+        : {}),
+      ...(input.consolationBracket != null
+        ? { consolationBracket: input.consolationBracket }
+        : {}),
     };
 
     let format = input.format as TournamentFormat | undefined;
@@ -299,10 +322,27 @@ export class TournamentsService {
       };
     });
 
+    const losersStartSource =
+      input.losersStartTeamIds?.length
+        ? input.losersStartTeamIds
+        : (settings.losersStartTeamIds ?? []);
+    const splitLosersIds =
+      format === 'DOUBLE_ELIMINATION' && settings.splitParticipantsStartInLosers
+        ? losersStartSource.filter((teamId) => teamById.has(teamId))
+        : [];
+    if (splitLosersIds.length && splitLosersIds.length >= t.teams.length) {
+      throw new BadRequestException(
+        'At least one participant must start in the winners bracket',
+      );
+    }
+
     const genOptions = {
       breakTiesWithPlacement: settings.breakTiesWithPlacement,
       doubleElimBracketReset: settings.doubleElimBracketReset,
       knockoutBestOf: settings.knockoutBestOf,
+      placementMatchesThrough: settings.placementMatchesThrough ?? 0,
+      consolationBracket: !!settings.consolationBracket,
+      ...(splitLosersIds.length ? { losersStartTeamIds: splitLosersIds } : {}),
     };
 
     let generated: GeneratedMatch[] = [];
@@ -314,45 +354,53 @@ export class TournamentsService {
     const advancePerGroup = settings.advancePerGroup;
     const meetings = settings.meetingsPerPair;
 
+    /**
+     * Round robin with N meetings per pair: each extra leg repeats the schedule
+     * after the previous one finishes and swaps home/away so legs alternate.
+     */
+    const roundRobinLegs = (
+      teamsForRr: EngineTeam[],
+      groupId: string | null,
+      legs: number,
+    ): GeneratedMatch[] => {
+      const base = generateRoundRobin(teamsForRr, groupId);
+      const roundsPerLeg = base.length ? Math.max(...base.map((m) => m.round)) : 0;
+      const out: GeneratedMatch[] = [];
+      for (let leg = 0; leg < Math.max(1, legs); leg++) {
+        const swap = leg % 2 === 1;
+        out.push(
+          ...base.map((match) => ({
+            ...match,
+            key: `${match.key}-leg${leg + 1}`,
+            round: match.round + leg * roundsPerLeg,
+            homeTeamId: swap ? match.awayTeamId : match.homeTeamId,
+            awayTeamId: swap ? match.homeTeamId : match.awayTeamId,
+          })),
+        );
+      }
+      return out;
+    };
+
     if (format === 'ROUND_ROBIN') {
       if (t.groups.length > 0) {
         for (const g of t.groups) {
           const gTeams = engineTeams.filter((x) => x.groupId === g.id);
-          for (let m = 0; m < meetings; m++) {
-            const rr = generateRoundRobin(gTeams, g.id).map((match, idx) => ({
-              ...match,
-              key: `${match.key}-leg${m + 1}`,
-              round: match.round + m * (gTeams.length - (gTeams.length % 2 === 0 ? 1 : 0) || 1),
-              position: match.position + idx * 0,
-            }));
-            // re-key properly
-            generated.push(
-              ...generateRoundRobin(gTeams, g.id).map((match) => ({
-                ...match,
-                key: `${match.key}-leg${m + 1}`,
-                round: match.round + m * 100,
-              })),
-            );
-            void rr;
-          }
+          generated.push(...roundRobinLegs(gTeams, g.id, meetings));
         }
       } else {
-        for (let m = 0; m < meetings; m++) {
-          generated.push(
-            ...generateRoundRobin(engineTeams).map((match) => ({
-              ...match,
-              key: `${match.key}-leg${m + 1}`,
-              round: match.round + m * 100,
-            })),
-          );
-        }
+        generated.push(...roundRobinLegs(engineTeams, null, meetings));
       }
     } else if (format === 'SINGLE_ELIMINATION') {
       generated = generateSingleElimination(engineTeams, genOptions);
     } else if (format === 'DOUBLE_ELIMINATION') {
       generated = generateDoubleElimination(engineTeams, genOptions);
     } else if (format === 'SWISS') {
-      generated = generateSwiss(engineTeams, swissRounds);
+      if (settings.swissMode === 'POTS') {
+        const drawSeed = settings.drawSeed ?? createDrawSeed(id, 'swiss-pots');
+        generated = generateSwissPots(engineTeams, swissRounds, { drawSeed }).matches;
+      } else {
+        generated = generateSwiss(engineTeams, swissRounds);
+      }
     } else if (
       format === 'TIME_TRIAL' ||
       format === 'SINGLE_RACE' ||
@@ -443,16 +491,12 @@ export class TournamentsService {
             }));
             generated.push(...expandTwoLeggedGroup(rr));
           } else {
-            for (let m = 0; m < meetings; m++) {
-              generated.push(
-                ...generateRoundRobin(gTeams, realGid).map((match) => ({
-                  ...match,
-                  groupId: realGid,
-                  key: `${match.key}-leg${m + 1}`,
-                  round: match.round + m * 100,
-                })),
-              );
-            }
+            generated.push(
+              ...roundRobinLegs(gTeams, realGid, meetings).map((match) => ({
+                ...match,
+                groupId: realGid,
+              })),
+            );
           }
         }
         const finalFmt = settings.finalStageFormat;
@@ -470,6 +514,7 @@ export class TournamentsService {
             homeFromMatchKey: m.homeFromMatchKey?.replace(/^(de-|se-)/, 'gk-') ?? null,
             awayFromMatchKey: m.awayFromMatchKey?.replace(/^(de-|se-)/, 'gk-') ?? null,
             nextMatchKey: m.nextMatchKey?.replace(/^(de-|se-)/, 'gk-') ?? null,
+            loserNextMatchKey: m.loserNextMatchKey?.replace(/^(de-|se-)/, 'gk-') ?? null,
             homeTeamId: null,
             awayTeamId: null,
           }));
@@ -483,48 +528,37 @@ export class TournamentsService {
             homeFromMatchKey: m.homeFromMatchKey?.replace(/^se-/, 'gk-') ?? null,
             awayFromMatchKey: m.awayFromMatchKey?.replace(/^se-/, 'gk-') ?? null,
             nextMatchKey: m.nextMatchKey?.replace(/^se-/, 'gk-') ?? null,
+            loserNextMatchKey: m.loserNextMatchKey?.replace(/^se-/, 'gk-') ?? null,
             homeTeamId: null,
             awayTeamId: null,
             isBye: false,
           }));
-        }
-        // rebuild next pointers
-        const byKey = new Map(ko.map((m) => [m.key, m]));
-        for (const m of ko) {
-          m.nextMatchKey = null;
-          m.nextMatchSlot = null;
-        }
-        for (const m of ko) {
-          if (m.homeFromMatchKey && byKey.get(m.homeFromMatchKey)) {
-            byKey.get(m.homeFromMatchKey)!.nextMatchKey = m.key;
-            byKey.get(m.homeFromMatchKey)!.nextMatchSlot = 'home';
-          }
-          if (m.awayFromMatchKey && byKey.get(m.awayFromMatchKey)) {
-            byKey.get(m.awayFromMatchKey)!.nextMatchKey = m.key;
-            byKey.get(m.awayFromMatchKey)!.nextMatchSlot = 'away';
-          }
         }
         generated.push(...ko);
       } else {
         generated = [];
         for (const g of t.groups) {
           const gTeams = engineTeams.filter((x) => x.groupId === g.id);
-          for (let m = 0; m < meetings; m++) {
-            generated.push(
-              ...generateRoundRobin(gTeams, g.id).map((match) => ({
-                ...match,
-                key: `${match.key}-leg${m + 1}`,
-                round: match.round + m * 100,
-              })),
-            );
-          }
+          generated.push(...roundRobinLegs(gTeams, g.id, meetings));
         }
-        const result = generateGroupsKnockout(
-          engineTeams,
-          t.groups.length,
-          advancePerGroup,
-        );
-        generated.push(...result.matches.filter((m) => m.key.startsWith('gk-')));
+        const koSlots = Math.max(2, t.groups.length * advancePerGroup);
+        const koPlaceholders = Array.from({ length: koSlots }, (_, i) => ({
+          id: `tbd-advancer-${i}`,
+          name: `Qualifier ${i + 1}`,
+          seed: i + 1,
+        }));
+        const ko = generateSingleElimination(koPlaceholders, genOptions).map((m) => ({
+          ...m,
+          key: m.key.replace(/^se-/, 'gk-'),
+          homeFromMatchKey: m.homeFromMatchKey?.replace(/^se-/, 'gk-') ?? null,
+          awayFromMatchKey: m.awayFromMatchKey?.replace(/^se-/, 'gk-') ?? null,
+          nextMatchKey: m.nextMatchKey?.replace(/^se-/, 'gk-') ?? null,
+          loserNextMatchKey: m.loserNextMatchKey?.replace(/^se-/, 'gk-') ?? null,
+          homeTeamId: null,
+          awayTeamId: null,
+          isBye: false,
+        }));
+        generated.push(...ko);
       }
     }
 
@@ -559,6 +593,8 @@ export class TournamentsService {
           bestOf: m.bestOf ?? null,
           tieId: m.tieId ?? null,
           legNumber: m.legNumber ?? null,
+          isPlacement: !!m.isPlacement,
+          placementRank: m.placementRank ?? null,
           status:
             m.homeTeamId &&
             m.awayTeamId &&
@@ -596,7 +632,7 @@ export class TournamentsService {
     });
     for (const bye of byeMatches) {
       const winnerId = bye.homeTeamId ?? bye.awayTeamId;
-      if (!winnerId || !bye.nextMatchId || !bye.nextMatchSlot) continue;
+      if (!winnerId) continue;
       await this.prisma.match.update({
         where: { id: bye.id },
         data: {
@@ -606,6 +642,7 @@ export class TournamentsService {
           awayScore: bye.awayTeamId ? 1 : 0,
         },
       });
+      if (!bye.nextMatchId || !bye.nextMatchSlot) continue;
       await this.prisma.match.update({
         where: { id: bye.nextMatchId },
         data: {
@@ -630,6 +667,10 @@ export class TournamentsService {
         });
       }
     }
+
+    // Byes never produce a loser: placement / consolation / losers-bracket
+    // slots fed by a bye are walkovers for the team that is already there.
+    await this.bracketRepair.autoResolveWalkovers(id);
 
     await this.prisma.tournament.update({
       where: { id },
@@ -922,7 +963,7 @@ export class TournamentsService {
     };
   }
 
-  async getBySlugForUser(slug: string, userId?: string) {
+  async getBySlugForUser(slug: string, userId?: string, viewToken?: string | null) {
     const t = await this.prisma.tournament.findUnique({
       where: { slug },
       include: this.fullInclude(),
@@ -936,6 +977,29 @@ export class TournamentsService {
     const canManage = isOwner || isAdmin;
     if (!t.isPublic && !canManage) {
       throw new NotFoundException('Tournament not found');
+    }
+
+    // Spectator password gate: return a minimal locked payload until the
+    // viewer unlocks with `POST /t/:slug/unlock` (x-view-token header).
+    {
+      const gateSettings = tournamentSettingsSchema.parse(t.settings ?? {});
+      if (
+        t.viewPasswordHash &&
+        gateSettings.viewPasswordEnabled &&
+        !canManage &&
+        !verifyViewToken(viewToken, t.slug)
+      ) {
+        return {
+          id: t.id,
+          slug: t.slug,
+          name: t.name,
+          logoUrl: t.logoUrl,
+          backgroundImageUrl: t.backgroundImageUrl,
+          requiresPassword: true,
+          isPublic: t.isPublic,
+          status: t.status,
+        };
+      }
     }
 
     if (canManage) {
@@ -1364,5 +1428,230 @@ export class TournamentsService {
     }
 
     return { ok: true, picks: body.picks };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle tools: clone / copy participants / reopen (sharing workstream)
+  // ---------------------------------------------------------------------------
+
+  /** Duplicate a tournament (fields + settings, optionally teams & players) as a DRAFT. */
+  async clone(
+    id: string,
+    userId: string,
+    input: { name?: string; includeParticipants?: boolean },
+  ) {
+    const src = await this.prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        admins: true,
+        groups: { orderBy: { order: 'asc' } },
+        teams: {
+          orderBy: { seed: 'asc' },
+          include: { players: { orderBy: { order: 'asc' } } },
+        },
+      },
+    });
+    if (!src) throw new NotFoundException('Tournament not found');
+    const allowed =
+      src.createdById === userId || src.admins.some((a) => a.userId === userId);
+    if (!allowed) throw new ForbiddenException();
+
+    const name = input.name?.trim() || `${src.name} (copy)`;
+    let slug = slugify(name, { lower: true, strict: true }) || 'tournament';
+    const base = slug;
+    let i = 1;
+    while (await this.prisma.tournament.findUnique({ where: { slug } })) {
+      slug = `${base}-${i++}`;
+    }
+
+    const rawSettings = (src.settings as Record<string, unknown>) ?? {};
+    const settings = tournamentSettingsSchema.parse({
+      ...rawSettings,
+      drawSeed: undefined,
+      drawAuditLog: [],
+    });
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const t = await tx.tournament.create({
+        data: {
+          name,
+          slug,
+          description: src.description,
+          gameId: src.gameId,
+          isPublic: src.isPublic,
+          pointsWin: src.pointsWin,
+          pointsDraw: src.pointsDraw,
+          allowPercent: src.allowPercent,
+          advancePerGroup: src.advancePerGroup,
+          swissRounds: src.swissRounds,
+          raceCount: src.raceCount,
+          eventCount: src.eventCount,
+          venueType: src.venueType,
+          venueName: src.venueName,
+          venueAddress: src.venueAddress,
+          venueUrl: src.venueUrl,
+          backgroundImageUrl: src.backgroundImageUrl,
+          logoUrl: src.logoUrl,
+          timezone: src.timezone,
+          scheduleConfig: src.scheduleConfig ?? {},
+          communityId: src.communityId,
+          settings,
+          status: TournamentStatus.DRAFT,
+          format: null,
+          createdById: userId,
+        },
+      });
+
+      if (input.includeParticipants) {
+        const groupMap = new Map<string, string>();
+        for (const g of src.groups) {
+          const ng = await tx.group.create({
+            data: { tournamentId: t.id, name: g.name, order: g.order },
+          });
+          groupMap.set(g.id, ng.id);
+        }
+        for (const team of src.teams) {
+          const nt = await tx.team.create({
+            data: {
+              tournamentId: t.id,
+              name: team.name,
+              seed: team.seed,
+              logoUrl: team.logoUrl,
+              teamPhotoUrl: team.teamPhotoUrl,
+              poolColor: team.poolColor,
+              groupId: team.groupId ? (groupMap.get(team.groupId) ?? null) : null,
+            },
+          });
+          if (team.players.length) {
+            await tx.teamPlayer.createMany({
+              data: team.players.map((p) => ({
+                teamId: nt.id,
+                name: p.name,
+                order: p.order,
+                isSub: p.isSub,
+                isCaptain: p.isCaptain,
+                photoUrl: p.photoUrl,
+              })),
+            });
+          }
+        }
+      }
+      return t;
+    });
+
+    return this.prisma.tournament.findUnique({
+      where: { id: created.id },
+      include: this.fullInclude(),
+    });
+  }
+
+  /** Copy teams (+players) from another tournament. Only before bracket generation. */
+  async copyParticipants(
+    id: string,
+    sourceId: string,
+    userId: string,
+    mode: 'replace' | 'append',
+  ) {
+    const target = await this.requireManage(id, userId);
+    if (target.id === sourceId) {
+      throw new BadRequestException('Source and target are the same tournament');
+    }
+    const matchCount = await this.prisma.match.count({ where: { tournamentId: id } });
+    if (matchCount > 0) {
+      throw new BadRequestException(
+        'Cannot copy participants after the bracket has been generated',
+      );
+    }
+    const source = await this.prisma.tournament.findUnique({
+      where: { id: sourceId },
+      include: {
+        admins: true,
+        teams: {
+          orderBy: { seed: 'asc' },
+          include: { players: { orderBy: { order: 'asc' } } },
+        },
+      },
+    });
+    if (!source) throw new NotFoundException('Source tournament not found');
+    const canReadSource =
+      source.isPublic ||
+      source.createdById === userId ||
+      source.admins.some((a) => a.userId === userId);
+    if (!canReadSource) throw new ForbiddenException('Cannot read source tournament');
+
+    const settings = tournamentSettingsSchema.parse(target.settings ?? {});
+    const existing = await this.prisma.team.findMany({
+      where: { tournamentId: id },
+      select: { name: true, seed: true },
+    });
+    const baseCount = mode === 'replace' ? 0 : existing.length;
+    const existingNames = new Set(
+      mode === 'replace' ? [] : existing.map((t) => t.name.toLowerCase()),
+    );
+    const toCopy = source.teams.filter((t) => !existingNames.has(t.name.toLowerCase()));
+    if (baseCount + toCopy.length > settings.maxParticipants) {
+      throw new BadRequestException(
+        `Copying would exceed max participants (${settings.maxParticipants})`,
+      );
+    }
+
+    let created = 0;
+    await this.prisma.$transaction(async (tx) => {
+      if (mode === 'replace') {
+        await tx.standing.deleteMany({ where: { tournamentId: id } });
+        await tx.team.deleteMany({ where: { tournamentId: id } });
+        await tx.group.deleteMany({ where: { tournamentId: id } });
+      }
+      let nextSeed =
+        (mode === 'replace' ? 0 : Math.max(0, ...existing.map((t) => t.seed ?? 0))) + 1;
+      for (const team of toCopy) {
+        const nt = await tx.team.create({
+          data: {
+            tournamentId: id,
+            name: team.name,
+            seed: nextSeed++,
+            logoUrl: team.logoUrl,
+            teamPhotoUrl: team.teamPhotoUrl,
+          },
+        });
+        if (team.players.length) {
+          await tx.teamPlayer.createMany({
+            data: team.players.map((p) => ({
+              teamId: nt.id,
+              name: p.name,
+              order: p.order,
+              isSub: p.isSub,
+              isCaptain: p.isCaptain,
+              photoUrl: p.photoUrl,
+            })),
+          });
+        }
+        created += 1;
+      }
+    });
+
+    this.realtime.emitBracketUpdated(id);
+    return {
+      ok: true,
+      created,
+      skipped: source.teams.length - toCopy.length,
+      tournament: await this.getOwned(id, userId).catch(() =>
+        this.prisma.tournament.findUnique({ where: { id }, include: this.fullInclude() }),
+      ),
+    };
+  }
+
+  /** Owner reopens a COMPLETED tournament so results can be corrected. */
+  async reopen(id: string, userId: string) {
+    const t = await this.requireOwner(id, userId);
+    if (t.status !== TournamentStatus.COMPLETED) {
+      throw new BadRequestException('Only completed tournaments can be reopened');
+    }
+    await this.prisma.tournament.update({
+      where: { id },
+      data: { status: TournamentStatus.ACTIVE, completedAt: null },
+    });
+    this.realtime.emitBracketUpdated(id);
+    return this.getOwned(id, userId);
   }
 }

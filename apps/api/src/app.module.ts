@@ -12,7 +12,20 @@ import { JobsModule } from './jobs/jobs.module';
 import { EventsModule } from './events/events.module';
 import { GamesModule } from './games/games.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
+import { CommonModule } from './common/common.module';
+import { CommunitiesModule } from './communities/communities.module';
+import { RankingsModule } from './rankings/rankings.module';
+import { TemplatesModule } from './templates/templates.module';
+import { EventHubModule } from './event-hub/event-hub.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
+import { RegistrationsModule } from './registrations/registrations.module';
+import { ExportsModule } from './exports/exports.module';
+import { BillingModule } from './billing/billing.module';
+import { DeveloperModule } from './developer/developer.module';
+import { InboxModule } from './inbox/inbox.module';
+import { AccountModule } from './account/account.module';
 
 const redisEnabled = process.env.REDIS_ENABLED === 'true';
 
@@ -35,12 +48,25 @@ const redisEnabled = process.env.REDIS_ENABLED === 'true';
         ]
       : []),
     PrismaModule,
+    CommonModule,
     AuthModule,
+    AccountModule,
+    CommunitiesModule,
+    RankingsModule,
+    TemplatesModule,
+    EventHubModule,
+    SchedulingModule,
+    RegistrationsModule,
+    ExportsModule,
+    BillingModule,
+    DeveloperModule,
+    InboxModule,
     TournamentsModule,
     MatchesModule,
     CricketModule,
     EventsModule,
     GamesModule,
+    AdminModule,
     UploadsModule,
     RealtimeModule,
     StandingsModule,

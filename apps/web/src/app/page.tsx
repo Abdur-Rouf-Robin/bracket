@@ -1,98 +1,106 @@
 'use client';
 
-import { HeroSliderShell } from '@/components/hero-slider-shell';
-import { SiteHeader } from '@/components/site-header';
-import { SportNav } from '@/components/sport-nav';
 import Link from 'next/link';
+import { useMemo } from 'react';
+import { ArrowRight, Play, Sparkles } from 'lucide-react';
+import { MarketingShell } from '@/components/marketing/marketing-shell';
+import { MiniBracket } from '@/components/marketing/mini-bracket';
+import { QuickStart } from '@/components/marketing/quick-start';
+import { SAMPLE_TEAMS, buildPreview } from '@/components/marketing/generate-preview';
+import {
+  CommunitiesEventsPromo,
+  FeatureGrid,
+  FinalCta,
+  FormatGrid,
+  HomeFaq,
+  HowItWorks,
+  PricingTeaser,
+  SportsLinks,
+  Testimonials,
+  TrustBand,
+} from '@/components/marketing/home-sections';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 
-const FEATURES = [
-  {
-    title: 'Every major format',
-    body: 'Single/double elim, Swiss, round robin, groups → KO, leaderboard, and race formats.',
-  },
-  {
-    title: 'Host tools',
-    body: 'Shuffle groups, color-pool drafts, announcements, co-admins, and shareable result cards.',
-  },
-  {
-    title: 'Built for players',
-    body: 'Public pages with live updates, optional standings, and SEO controls for private events.',
-  },
-];
-
-export default function HomePage() {
+function Hero() {
   const { user } = useAuth();
+  const demo = useMemo(
+    () => buildPreview('SINGLE_ELIMINATION', SAMPLE_TEAMS, { thirdPlace: false, seed: 7 }),
+    [],
+  );
 
   return (
-    <div className="min-h-screen">
-      <SiteHeader />
-      <SportNav />
-      <main>
-        <HeroSliderShell />
+    <section className="relative overflow-hidden border-b border-[var(--color-line)]">
+      <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
+      <div
+        className="pointer-events-none absolute -top-40 left-1/2 h-[32rem] w-[60rem] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
+        style={{
+          background:
+            'radial-gradient(closest-side, color-mix(in srgb, var(--color-accent) 40%, transparent), transparent 70%)',
+        }}
+        aria-hidden
+      />
+      <div className="container-page relative grid items-center gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
+        <div>
+          <span className="badge badge-accent">
+            <Sparkles className="size-3" aria-hidden /> New: auto-scheduler, communities & events
+          </span>
+          <h1 className="font-display mt-5 text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
+            Run any tournament.
+            <br />
+            <span className="gradient-text">Brackets, schedules, live results.</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-lg text-[var(--color-muted)]">
+            Single and double elimination, round robin, Swiss, groups + knockout, leaderboards and
+            racing. Generate in seconds, run it from your phone, and let everyone follow live —
+            no login needed for viewers.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button size="lg" className="gaming-glow" asChild>
+              <Link href={user ? '/tournaments/new' : '/register?next=/tournaments/new'}>
+                Create a tournament <ArrowRight />
+              </Link>
+            </Button>
+            <Button size="lg" variant="secondary" asChild>
+              <Link href="/bracket-generator">
+                <Play /> Try the bracket generator
+              </Link>
+            </Button>
+          </div>
+          <p className="mt-4 text-xs text-[var(--color-muted)]">
+            Free forever for up to 256 participants · No credit card
+          </p>
 
-        <section className="mx-auto max-w-6xl px-6 py-16">
-          <div className="mb-10 text-center">
-            <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-accent)]">
-              Tournament platform
+          <div className="mt-10 hidden lg:block">
+            <p className="font-display mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--color-muted)]">
+              Live preview · 8-team single elimination
             </p>
-            <h2 className="font-display mt-2 text-3xl font-bold md:text-4xl">
-              Everything you need to run brackets
-            </h2>
-            {user && (
-              <p className="mt-3 text-[var(--color-muted)]">
-                Welcome back, {user.name}.
-              </p>
-            )}
+            <MiniBracket preview={demo} compact className="border border-[var(--color-line)] bg-[var(--color-card)]/60" />
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {FEATURES.map((f) => (
-              <article
-                key={f.title}
-                className="gaming-card rounded-xl p-6 transition hover:border-[var(--color-accent)]/40"
-              >
-                <h3 className="font-display text-lg font-bold text-[var(--color-accent)]">
-                  {f.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">
-                  {f.body}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
+        </div>
 
-        <section className="border-t border-[var(--color-line)] bg-[var(--color-surface)]/50">
-          <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-14 text-center">
-            <h2 className="font-display text-2xl font-bold md:text-3xl">
-              Ready to run your next event?
-            </h2>
-            <p className="max-w-lg text-[var(--color-muted)]">
-              Create a tournament, add participants, and generate your bracket in minutes.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Link
-                href="/tournaments/new"
-                className="gaming-glow rounded-md bg-[var(--color-accent)] px-6 py-2.5 text-sm font-bold text-[#041018] transition hover:bg-[var(--color-accent-deep)] hover:text-white"
-              >
-                New tournament
-              </Link>
-              <Link
-                href="/browse"
-                className="rounded-md border border-[var(--color-line)] bg-[var(--color-card)] px-6 py-2.5 text-sm font-semibold transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-hover)]"
-              >
-                Browse tournaments
-              </Link>
-              <Link
-                href="/dashboard"
-                className="rounded-md border border-[var(--color-line)] bg-[var(--color-card)] px-6 py-2.5 text-sm font-semibold transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-hover)]"
-              >
-                Your tournaments
-              </Link>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+        <div className="float-slow lg:justify-self-end lg:w-full lg:max-w-md">
+          <QuickStart />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <MarketingShell>
+      <Hero />
+      <TrustBand />
+      <HowItWorks />
+      <FormatGrid />
+      <FeatureGrid />
+      <CommunitiesEventsPromo />
+      <SportsLinks />
+      <Testimonials />
+      <PricingTeaser />
+      <HomeFaq />
+      <FinalCta />
+    </MarketingShell>
   );
 }

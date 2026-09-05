@@ -9,10 +9,13 @@ export function TeamBadge({
   team,
   size = 'md',
   compact = false,
+  showSeed = false,
 }: {
   team: Team | null | undefined;
   size?: 'sm' | 'md' | 'lg';
   compact?: boolean;
+  /** Prefix the name with the seed number (honours `hideSeedNumbers` upstream). */
+  showSeed?: boolean;
 }) {
   const name = team?.name ?? 'TBD';
   const bg = teamColor(team ?? { id: '', name, seed: null, groupId: null, poolColor: null });
@@ -30,6 +33,9 @@ export function TeamBadge({
       </div>
       {!compact && (
         <span className="truncate text-[11px] font-medium leading-tight text-[var(--color-ink)]">
+          {showSeed && team?.seed != null && (
+            <span className="mr-1 text-[9px] text-[var(--color-muted)]">{team.seed}</span>
+          )}
           {name}
         </span>
       )}

@@ -38,7 +38,9 @@ async function bootstrap() {
 
 
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 
@@ -86,11 +88,13 @@ async function bootstrap() {
 
   const port = Number(process.env.API_PORT ?? 3001);
 
-  await app.listen(port);
+  const host = process.env.HOST ?? '0.0.0.0';
 
-  console.log(`API listening on http://localhost:${port}`);
+  await app.listen(port, host);
 
-  console.log(`Swagger at http://localhost:${port}/api/docs`);
+  console.log(`API listening on http://${host}:${port}`);
+
+  console.log(`Swagger at http://${host}:${port}/api/docs`);
 
 }
 
