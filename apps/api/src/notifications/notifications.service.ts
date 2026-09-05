@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InboxService } from '../inbox/inbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../developer/webhooks.service';
 
@@ -10,6 +11,7 @@ export class NotificationsService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly inbox: InboxService,
     @Optional() private readonly webhooks?: WebhooksService,
   ) {}
 
@@ -46,7 +48,7 @@ export class NotificationsService {
     const tournament = await this.prisma.tournament.findUnique({
       where: { id: tournamentId },
       include: {
-        createdBy: { select: { email: true } },
+        createdBy: { select: { id: true, email: true } },
       },
     });
     if (!tournament) return;
@@ -57,24 +59,14 @@ export class NotificationsService {
     });
     const userIds = [
       ...new Set(
-        teams
-          .map((t) => t.registeredByUserId)
-          .filter((id): id is string => !!id),
+        [
+          tournament.createdBy?.id,
+          ...teams.map((t) => t.registeredByUserId),
+        ].filter((id): id is string => !!id),
       ),
     ];
-    const users =
-      userIds.length > 0
-        ? await this.prisma.user.findMany({
-            where: { id: { in: userIds } },
-            select: { email: true },
-          })
-        : [];
-
-    const recipients = new Set<string>();
-    if (tournament.createdBy?.email) recipients.add(tournament.createdBy.email);
-    for (const user of users) {
-      if (user.email) recipients.add(user.email);
-    }
+    const allowed = await this.inbox.usersAllowingEmail(userIds, 'emailFinalResults');
+    const recipients = [...new Set(allowed.map((u) => u.email).filter(Boolean))];
 
     const subject = `Final results — ${tournament.name}`;
     const html = `<p>The tournament <strong>${tournament.name}</strong> has completed.</p><p>View results on your Bracket dashboard.</p>`;
@@ -103,19 +95,13 @@ export class NotificationsService {
       match.awayTeam?.registeredByUserId,
     ].filter((id): id is string => !!id);
 
-    const users =
-      userIds.length > 0
-        ? await this.prisma.user.findMany({
-            where: { id: { in: userIds } },
-            select: { email: true },
-          })
-        : [];
+    const users = await this.inbox.usersAllowingEmail(userIds, 'emailMatchReady');
 
     const subject = `Match ready`;
     const html = `<p>Your match is ready: <strong>${homeTeam ?? 'TBD'}</strong> vs <strong>${awayTeam ?? 'TBD'}</strong>.</p>`;
 
     for (const user of users) {
-      if (user.email) await this.sendEmail(user.email, subject, html);
+      await this.sendEmail(user.email, subject, html);
     }
   }
 
@@ -149,13 +135,20 @@ export class NotificationsService {
         });
         if (!res.ok) {
           this.logger.warn(`Resend email failed (${res.status}) for ${to}`);
+          return { delivered: false, mode: 'resend' as const };
         }
-        return;
+        return { delivered: true, mode: 'resend' as const };
       } catch (err) {
         this.logger.warn(`Resend error: ${(err as Error).message}`);
+        return { delivered: false, mode: 'resend' as const };
       }
     }
 
     this.logger.log(`Email (dry-run) to ${to}: ${subject}`);
+    return { delivered: false, mode: 'dry-run' as const };
+  }
+
+  isConfigured() {
+    return !!this.config.get<string>('RESEND_API_KEY');
   }
 }

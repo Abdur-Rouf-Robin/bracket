@@ -262,7 +262,7 @@ export function suggestFormatPlans(
       if (p.singleStageFormat === 'DOUBLE_ELIMINATION') p.score += 8;
     }
   }
-  if (gameProfile?.category === 'Outdoor') {
+  if (gameProfile?.category === 'Outdoor' || gameProfile?.category === 'Sports') {
     for (const p of plans) {
       if (p.format === TournamentFormat.GROUPS_KNOCKOUT) p.score += 5;
     }

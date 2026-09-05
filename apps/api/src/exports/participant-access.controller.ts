@@ -1,16 +1,20 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { matchResultSchema, type MatchResultInput } from '@bracket/shared';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { TokenOrQueryAuthGuard } from './token-or-query-auth.guard';
 import { ParticipantAccessService } from './participant-access.service';
 import { PublicAccessService } from './public-access.service';
@@ -74,6 +78,27 @@ export class ParticipantAccessController {
   @Get('p/:token')
   resolve(@Param('token') token: string) {
     return this.participants.resolve(token);
+  }
+
+  @Post('p/:token/check-in')
+  checkIn(@Param('token') token: string) {
+    return this.participants.checkIn(token);
+  }
+
+  @Patch('p/:token/matches/:matchId/result')
+  reportResult(
+    @Param('token') token: string,
+    @Param('matchId') matchId: string,
+    @Body(new ZodValidationPipe(matchResultSchema)) body: MatchResultInput,
+  ) {
+    return this.participants.reportResult(token, matchId, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('account/play')
+  playHub(@CurrentUser() user: { id: string }) {
+    return this.participants.playHub(user.id);
   }
 
   @Get('p/:token/schedule.ics')

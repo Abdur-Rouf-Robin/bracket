@@ -11,8 +11,13 @@ import {
   CricketFormat,
   CricketInningsEndReason,
   CricketInningsStatus,
+  aggregateTeamRuns,
   computeDlsRevisedTarget,
   computeLeaguePoints,
+  cricketChaseTarget,
+  cricketFollowOnState,
+  cricketFormatPreset,
+  dismissalCountsAsWicket,
   formatCricketOvers,
   lastCompletedOverBowlerId,
   bowlingLegalBallsByBowler,
@@ -35,6 +40,7 @@ import {
   type CricketManualReportInput,
   type CricketTossInput,
   type CricketStandaloneTossInput,
+  type CricketFollowOnInput,
   parseCricketOvers,
   type PlayerMatchStatsInput,
 } from '@bracket/shared';
@@ -46,11 +52,17 @@ import { TournamentsService } from '../tournaments/tournaments.service';
 import { MatchesService } from '../matches/matches.service';
 import { buildScoreboard, emptyScoreboard } from './cricket-board.util';
 
-const DEFAULT_OVERS: Record<string, number> = {
-  T20: 20,
-  ODI: 50,
-  CUSTOM: 20,
-};
+function setupFromInput(input: CricketSetupInput | CricketCreateStandaloneInput) {
+  const format = input.format ?? 'T20';
+  const preset = cricketFormatPreset(format);
+  return {
+    format,
+    maxOvers: input.maxOvers ?? preset.maxOvers,
+    ballsPerOver: input.ballsPerOver ?? preset.ballsPerOver,
+    inningsCount: input.inningsCount ?? preset.inningsCount,
+    followOnMargin: input.followOnMargin ?? preset.followOnMargin,
+  };
+}
 
 @Injectable()
 export class CricketService {
@@ -175,33 +187,32 @@ export class CricketService {
     const match = await this.loadMatch(matchId);
     await this.assertCanScore(match, userId);
 
-    const maxOvers =
-      input.maxOvers ??
-      DEFAULT_OVERS[input.format ?? 'T20'] ??
-      DEFAULT_OVERS.T20;
-    const bowlerLimits = resolveBowlerLimits(maxOvers, input.format ?? 'T20', input);
+    const cfg = setupFromInput(input);
+    const bowlerLimits = resolveBowlerLimits(cfg.maxOvers, cfg.format, input);
 
     const cricket = await this.prisma.cricketMatch.upsert({
       where: { matchId },
       create: {
         matchId,
-        format: (input.format ?? 'T20') as CricketFormat,
-        maxOvers,
+        format: cfg.format as CricketFormat,
+        maxOvers: cfg.maxOvers,
         maxWickets: input.maxWickets ?? 10,
-        ballsPerOver: input.ballsPerOver ?? 6,
+        ballsPerOver: cfg.ballsPerOver,
         maxOversPerBowler: bowlerLimits.maxOversPerBowler,
         maxBowlersAtLimit: bowlerLimits.maxBowlersAtLimit,
-        inningsCount: input.inningsCount ?? 2,
+        inningsCount: cfg.inningsCount,
+        followOnMargin: cfg.followOnMargin,
         strikeRotationMode: input.strikeRotationMode ?? 'AUTO',
       },
       update: {
-        format: (input.format ?? 'T20') as CricketFormat,
-        maxOvers,
+        format: cfg.format as CricketFormat,
+        maxOvers: cfg.maxOvers,
         maxWickets: input.maxWickets ?? 10,
-        ballsPerOver: input.ballsPerOver ?? 6,
+        ballsPerOver: cfg.ballsPerOver,
         maxOversPerBowler: bowlerLimits.maxOversPerBowler,
         maxBowlersAtLimit: bowlerLimits.maxBowlersAtLimit,
-        inningsCount: input.inningsCount ?? 2,
+        inningsCount: cfg.inningsCount,
+        followOnMargin: cfg.followOnMargin,
         strikeRotationMode: input.strikeRotationMode ?? 'AUTO',
       },
     });
@@ -261,17 +272,23 @@ export class CricketService {
       throw new BadRequestException('Another innings is in progress');
     }
 
-    if (input.inningsNumber === 2) {
-      const first = cricket.innings.find((i) => i.inningsNumber === 1);
-      if (!first || first.status !== CricketInningsStatus.COMPLETED) {
-        throw new BadRequestException('First innings must be completed');
+    if (input.inningsNumber > 1) {
+      const prev = cricket.innings.find(
+        (i) => i.inningsNumber === input.inningsNumber - 1 && !i.isSuperOver,
+      );
+      if (!prev || prev.status !== CricketInningsStatus.COMPLETED) {
+        throw new BadRequestException(
+          `Innings ${input.inningsNumber - 1} must be completed first`,
+        );
       }
     }
 
-    const targetRuns =
-      input.inningsNumber === 2
-        ? (cricket.innings.find((i) => i.inningsNumber === 1)?.runs ?? 0) + 1
-        : null;
+    const targetRuns = cricketChaseTarget({
+      inningsCount: cricket.inningsCount,
+      startingInningsNumber: input.inningsNumber,
+      battingTeamId: input.battingTeamId,
+      innings: cricket.innings,
+    });
 
     const innings = await this.prisma.cricketInnings.upsert({
       where: {
@@ -607,16 +624,24 @@ export class CricketService {
       return;
     }
 
-    if (regularCompleted.length < full.inningsCount) return;
+    if (regularCompleted.length < full.inningsCount) {
+      if (this.isInningsVictory(full, regularCompleted)) {
+        await this.finalizeMatchFromCricket(match, userId);
+      }
+      return;
+    }
 
     const homeId = match.homeTeamId!;
     const awayId = match.awayTeamId!;
-    const homeInn = regularCompleted.find((i) => i.battingTeamId === homeId);
-    const awayInn = regularCompleted.find((i) => i.battingTeamId === awayId);
-    const homeRuns = homeInn?.runs ?? 0;
-    const awayRuns = awayInn?.runs ?? 0;
+    const homeRuns = aggregateTeamRuns(regularCompleted, homeId);
+    const awayRuns = aggregateTeamRuns(regularCompleted, awayId);
 
-    if (homeRuns === awayRuns && this.isKnockoutMatch(match)) {
+    if (
+      homeRuns === awayRuns &&
+      this.isKnockoutMatch(match) &&
+      full.inningsCount <= 2 &&
+      full.format !== 'TEST'
+    ) {
       await this.prisma.cricketMatch.update({
         where: { id: full.id },
         data: { superOverPending: true },
@@ -625,6 +650,83 @@ export class CricketService {
     }
 
     await this.finalizeMatchFromCricket(match, userId);
+  }
+
+  private isInningsVictory(
+    full: { followOnEnforced: boolean },
+    regularCompleted: Array<{
+      inningsNumber: number;
+      battingTeamId: string;
+      runs: number;
+      isSuperOver?: boolean;
+    }>,
+  ) {
+    if (!full.followOnEnforced || regularCompleted.length < 3) return false;
+    const first = regularCompleted.find((i) => i.inningsNumber === 1);
+    const second = regularCompleted.find((i) => i.inningsNumber === 2);
+    if (!first || !second) return false;
+    return (
+      aggregateTeamRuns(regularCompleted, first.battingTeamId) >
+      aggregateTeamRuns(regularCompleted, second.battingTeamId)
+    );
+  }
+
+  async enforceFollowOn(
+    matchId: string,
+    userId: string,
+    input: CricketFollowOnInput,
+  ) {
+    const match = await this.loadMatch(matchId);
+    await this.assertCanScore(match, userId);
+    const cricket = await this.loadCricketWithInnings({ matchId });
+    if (!cricket) throw new BadRequestException('Configure cricket match first');
+    await this.applyFollowOn(cricket, input.enforce);
+    await this.emitUpdate(match.tournamentId, matchId);
+    return this.getScoreboard(matchId);
+  }
+
+  async enforceStandaloneFollowOn(
+    slug: string,
+    token: string,
+    input: CricketFollowOnInput,
+  ) {
+    await this.assertStandaloneEdit(slug, token);
+    const cricket = await this.loadCricketWithInnings({ slug });
+    if (!cricket) throw new NotFoundException();
+    await this.applyFollowOn(cricket, input.enforce);
+    await this.emitStandaloneUpdate(slug);
+    return this.getStandaloneScoreboard(slug);
+  }
+
+  private async applyFollowOn(
+    cricket: NonNullable<Awaited<ReturnType<CricketService['loadCricketWithInnings']>>>,
+    enforce: boolean,
+  ) {
+    if (cricket.format === 'T20' || cricket.format === 'ODI' || cricket.format === 'HUNDRED') {
+      throw new BadRequestException('Follow-on applies to Test and other multi-innings matches');
+    }
+    const state = cricketFollowOnState({
+      format: cricket.format,
+      inningsCount: Math.max(cricket.inningsCount, 4),
+      followOnEnforced: cricket.followOnEnforced,
+      followOnMargin: cricket.followOnMargin,
+      innings: cricket.innings,
+    });
+    if (enforce && !state?.available && !cricket.followOnEnforced) {
+      throw new BadRequestException(
+        `Follow-on is not available (need a lead of ${state?.margin ?? 200} after the first two innings)`,
+      );
+    }
+    if (cricket.innings.some((i) => i.inningsNumber >= 3 && i.status !== 'NOT_STARTED')) {
+      throw new BadRequestException('Follow-on cannot be changed after the third innings starts');
+    }
+    await this.prisma.cricketMatch.update({
+      where: { id: cricket.id },
+      data: {
+        followOnEnforced: enforce,
+        inningsCount: Math.max(cricket.inningsCount, 4),
+      },
+    });
   }
 
   private isKnockoutMatch(
@@ -707,8 +809,8 @@ export class CricketService {
       (i) => i.isSuperOver && i.status === CricketInningsStatus.COMPLETED,
     );
 
-    let homeRuns = regular.find((i) => i.battingTeamId === homeId)?.runs ?? 0;
-    let awayRuns = regular.find((i) => i.battingTeamId === awayId)?.runs ?? 0;
+    let homeRuns = aggregateTeamRuns(regular, homeId);
+    let awayRuns = aggregateTeamRuns(regular, awayId);
     let winnerTeamId: string | null = null;
     let isDraw = false;
 
@@ -957,7 +1059,15 @@ export class CricketService {
     if (!cricket) {
       throw new BadRequestException('Configure cricket match first');
     }
+    await this.applySuperOverInnings(cricket, input);
+    await this.emitUpdate(match.tournamentId, matchId);
+    return this.getScoreboard(matchId);
+  }
 
+  private async applySuperOverInnings(
+    cricket: NonNullable<Awaited<ReturnType<CricketService['loadCricketWithInnings']>>>,
+    input: CricketStartSuperOverInput,
+  ) {
     const superActive = cricket.innings.find(
       (i) => i.isSuperOver && i.status === CricketInningsStatus.IN_PROGRESS,
     );
@@ -981,14 +1091,14 @@ export class CricketService {
     let targetRuns: number | null = null;
 
     if (superDone.length === 0) {
-      const second = cricket.innings.find(
-        (i) => i.inningsNumber === 2 && !i.isSuperOver,
-      );
-      if (!second || second.status !== CricketInningsStatus.COMPLETED) {
+      const lastRegular = [...cricket.innings]
+        .reverse()
+        .find((i) => !i.isSuperOver && i.status === CricketInningsStatus.COMPLETED);
+      if (!lastRegular) {
         throw new BadRequestException('Regular innings must be complete');
       }
-      battingTeamId = second.battingTeamId;
-      bowlingTeamId = second.bowlingTeamId;
+      battingTeamId = lastRegular.battingTeamId;
+      bowlingTeamId = lastRegular.bowlingTeamId;
     } else {
       const firstSo = superDone[0]!;
       battingTeamId = firstSo.bowlingTeamId;
@@ -1019,9 +1129,6 @@ export class CricketService {
         status: CricketInningsStatus.IN_PROGRESS,
       },
     });
-
-    await this.emitUpdate(match.tournamentId, matchId);
-    return this.getScoreboard(matchId);
   }
 
   private async loadMatch(matchId: string) {
@@ -1141,8 +1248,7 @@ export class CricketService {
   }
 
   async createStandalone(input: CricketCreateStandaloneInput) {
-    const maxOvers =
-      input.maxOvers ?? DEFAULT_OVERS[input.format ?? 'T20'] ?? DEFAULT_OVERS.T20;
+    const cfg = setupFromInput(input);
     const slug = this.makeSlug();
     const editToken = this.makeEditToken();
 
@@ -1152,11 +1258,7 @@ export class CricketService {
         Math.max(1, input.homePlayers.length - 1),
         Math.max(1, input.awayPlayers.length - 1),
       );
-    const bowlerLimits = resolveBowlerLimits(
-      maxOvers,
-      input.format ?? 'T20',
-      input,
-    );
+    const bowlerLimits = resolveBowlerLimits(cfg.maxOvers, cfg.format, input);
 
     const cricket = await this.prisma.cricketMatch.create({
       data: {
@@ -1168,13 +1270,14 @@ export class CricketService {
         awayTeamName: input.awayTeamName,
         homeRoster: input.homePlayers,
         awayRoster: input.awayPlayers,
-        format: (input.format ?? 'T20') as CricketFormat,
-        maxOvers,
+        format: cfg.format as CricketFormat,
+        maxOvers: cfg.maxOvers,
         maxWickets,
-        ballsPerOver: input.ballsPerOver ?? 6,
+        ballsPerOver: cfg.ballsPerOver,
         maxOversPerBowler: bowlerLimits.maxOversPerBowler,
         maxBowlersAtLimit: bowlerLimits.maxBowlersAtLimit,
-        inningsCount: input.inningsCount ?? 2,
+        inningsCount: cfg.inningsCount,
+        followOnMargin: cfg.followOnMargin,
         strikeRotationMode: input.strikeRotationMode ?? 'AUTO',
         tossWinnerSide: input.toss?.winnerSide ?? null,
         tossDecision: input.toss?.decision ?? null,
@@ -1264,19 +1367,19 @@ export class CricketService {
 
   async setupStandalone(slug: string, token: string, input: CricketSetupInput) {
     await this.assertStandaloneEdit(slug, token);
-    const maxOvers =
-      input.maxOvers ?? DEFAULT_OVERS[input.format ?? 'T20'] ?? DEFAULT_OVERS.T20;
-    const bowlerLimits = resolveBowlerLimits(maxOvers, input.format ?? 'T20', input);
+    const cfg = setupFromInput(input);
+    const bowlerLimits = resolveBowlerLimits(cfg.maxOvers, cfg.format, input);
     await this.prisma.cricketMatch.update({
       where: { slug },
       data: {
-        format: (input.format ?? 'T20') as CricketFormat,
-        maxOvers,
+        format: cfg.format as CricketFormat,
+        maxOvers: cfg.maxOvers,
         maxWickets: input.maxWickets ?? 10,
-        ballsPerOver: input.ballsPerOver ?? 6,
+        ballsPerOver: cfg.ballsPerOver,
         maxOversPerBowler: bowlerLimits.maxOversPerBowler,
         maxBowlersAtLimit: bowlerLimits.maxBowlersAtLimit,
-        inningsCount: input.inningsCount ?? 2,
+        inningsCount: cfg.inningsCount,
+        followOnMargin: cfg.followOnMargin,
         strikeRotationMode: input.strikeRotationMode ?? 'AUTO',
       },
     });
@@ -1296,16 +1399,23 @@ export class CricketService {
     const full = await this.loadCricketWithInnings({ slug });
     if (!full) throw new NotFoundException();
 
-    if (input.inningsNumber === 2) {
-      const first = full.innings.find((i) => i.inningsNumber === 1);
-      if (!first || first.status !== CricketInningsStatus.COMPLETED) {
-        throw new BadRequestException('First innings must be completed');
+    if (input.inningsNumber > 1) {
+      const prev = full.innings.find(
+        (i) => i.inningsNumber === input.inningsNumber - 1 && !i.isSuperOver,
+      );
+      if (!prev || prev.status !== CricketInningsStatus.COMPLETED) {
+        throw new BadRequestException(
+          `Innings ${input.inningsNumber - 1} must be completed first`,
+        );
       }
     }
 
-    const firstInn = full.innings.find((i) => i.inningsNumber === 1);
-    const targetRuns =
-      input.inningsNumber === 2 ? (firstInn?.runs ?? 0) + 1 : null;
+    const targetRuns = cricketChaseTarget({
+      inningsCount: full.inningsCount,
+      startingInningsNumber: input.inningsNumber,
+      battingTeamId,
+      innings: full.innings,
+    });
 
     this.assertBowlerAllowed(full, { balls: [] }, input.bowlerId);
 
@@ -1550,7 +1660,8 @@ export class CricketService {
       ? ((legalAfter - 1) % ballsPerOver) + 1
       : (lastBall?.ballInOver ?? 0) + 1;
 
-    let wickets = innings.wickets + (input.isWicket ? 1 : 0);
+    const countsWicket = dismissalCountsAsWicket(input.wicketType, input.isWicket);
+    let wickets = innings.wickets + (countsWicket ? 1 : 0);
     let status = innings.status;
     let strikerId: string | null = innings.strikerId;
     let nonStrikerId: string | null = innings.nonStrikerId;
@@ -1563,7 +1674,7 @@ export class CricketService {
         ? input.extraRuns
         : 0);
 
-    if (input.isWicket && input.dismissedPlayerId) {
+    if ((input.isWicket || input.wicketType === 'RETIRED_HURT') && input.dismissedPlayerId) {
       if (input.dismissedPlayerId === strikerId) {
         strikerId = null;
       } else if (input.dismissedPlayerId === nonStrikerId) {
@@ -1590,6 +1701,10 @@ export class CricketService {
       rosterSizes,
       innings.isSuperOver,
     );
+    const unlimited =
+      !innings.isSuperOver &&
+      cricket.maxOvers <= 0 &&
+      innings.revisedMaxOvers == null;
     const effectiveMax = innings.isSuperOver
       ? (innings.revisedMaxOvers ?? 1)
       : (innings.revisedMaxOvers ?? cricket.maxOvers);
@@ -1597,7 +1712,8 @@ export class CricketService {
     let endReason: CricketInningsEndReason | null = null;
     let isAllOut = false;
     const inningsComplete =
-      legalAfter >= maxLegalBalls || wickets >= maxWickets;
+      (!unlimited && effectiveMax > 0 && legalAfter >= maxLegalBalls) ||
+      wickets >= maxWickets;
     if (inningsComplete) {
       status = CricketInningsStatus.COMPLETED;
       if (wickets >= maxWickets) {
@@ -1624,7 +1740,7 @@ export class CricketService {
           extraRuns: input.extraRuns,
           totalRuns,
           isLegalDelivery,
-          isWicket: input.isWicket,
+          isWicket: countsWicket,
           wicketType: input.wicketType ?? null,
           dismissedPlayerId: input.dismissedPlayerId ?? null,
           fielderId: input.fielderId ?? null,
@@ -1839,6 +1955,7 @@ export class CricketService {
 
     const dismissed = new Set(
       innings.balls
+        .filter((b) => dismissalCountsAsWicket(b.wicketType, b.isWicket))
         .map((b) => b.dismissedPlayerId)
         .filter((id): id is string => !!id),
     );
@@ -1866,16 +1983,56 @@ export class CricketService {
     const completed = cricket.innings.filter(
       (i) => i.status === CricketInningsStatus.COMPLETED,
     );
-    if (completed.length < cricket.inningsCount) return;
-    const homeInn = completed.find((i) => i.battingTeamId === 'home');
-    const awayInn = completed.find((i) => i.battingTeamId === 'away');
-    if (!homeInn || !awayInn) return;
+    const regular = completed.filter((i) => !i.isSuperOver);
+    const superDone = completed.filter((i) => i.isSuperOver);
+    if (regular.length < cricket.inningsCount) {
+      if (this.isInningsVictory(cricket, regular)) {
+        const homeRuns = aggregateTeamRuns(regular, 'home');
+        const awayRuns = aggregateTeamRuns(regular, 'away');
+        await this.prisma.cricketMatch.update({
+          where: { id: cricket.id },
+          data: {
+            homePoints: homeRuns > awayRuns ? computeLeaguePoints('win') : computeLeaguePoints('loss'),
+            awayPoints: awayRuns > homeRuns ? computeLeaguePoints('win') : computeLeaguePoints('loss'),
+            superOverPending: false,
+          },
+        });
+      }
+      return;
+    }
+    const homeRuns = aggregateTeamRuns(regular, 'home');
+    const awayRuns = aggregateTeamRuns(regular, 'away');
+    if (
+      homeRuns === awayRuns &&
+      cricket.inningsCount <= 2 &&
+      cricket.format !== 'TEST' &&
+      superDone.length < 2
+    ) {
+      await this.prisma.cricketMatch.update({
+        where: { id: cricket.id },
+        data: { superOverPending: true },
+      });
+      return;
+    }
     let homePoints = 0;
     let awayPoints = 0;
-    if (homeInn.runs === awayInn.runs) {
+    if (superDone.length >= 2) {
+      const hSo = superDone.find((i) => i.battingTeamId === 'home')?.runs ?? 0;
+      const aSo = superDone.find((i) => i.battingTeamId === 'away')?.runs ?? 0;
+      if (hSo === aSo) {
+        homePoints = computeLeaguePoints('tie');
+        awayPoints = computeLeaguePoints('tie');
+      } else if (hSo > aSo) {
+        homePoints = computeLeaguePoints('win');
+        awayPoints = computeLeaguePoints('loss');
+      } else {
+        homePoints = computeLeaguePoints('loss');
+        awayPoints = computeLeaguePoints('win');
+      }
+    } else if (homeRuns === awayRuns) {
       homePoints = computeLeaguePoints('tie');
       awayPoints = computeLeaguePoints('tie');
-    } else if (homeInn.runs > awayInn.runs) {
+    } else if (homeRuns > awayRuns) {
       homePoints = computeLeaguePoints('win');
       awayPoints = computeLeaguePoints('loss');
     } else {
@@ -1884,7 +2041,48 @@ export class CricketService {
     }
     await this.prisma.cricketMatch.update({
       where: { id: cricket.id },
-      data: { homePoints, awayPoints },
+      data: { homePoints, awayPoints, superOverPending: false },
     });
+  }
+
+  async startStandaloneSuperOver(
+    slug: string,
+    token: string,
+    input: CricketStartSuperOverInput,
+  ) {
+    await this.assertStandaloneEdit(slug, token);
+    const cricket = await this.loadCricketWithInnings({ slug });
+    if (!cricket) throw new NotFoundException();
+    await this.applySuperOverInnings(cricket, input);
+    await this.emitStandaloneUpdate(slug);
+    return this.getStandaloneScoreboard(slug);
+  }
+
+  async abandonStandalone(
+    slug: string,
+    token: string,
+    input: { reason: 'NO_RESULT' | 'ABANDONED' },
+  ) {
+    await this.assertStandaloneEdit(slug, token);
+    const cricket = await this.loadCricketWithInnings({ slug });
+    if (!cricket) throw new NotFoundException();
+    const active = cricket.innings.find(
+      (i) => i.status === CricketInningsStatus.IN_PROGRESS,
+    );
+    if (active) {
+      await this.prisma.cricketInnings.update({
+        where: { id: active.id },
+        data: {
+          status: CricketInningsStatus.COMPLETED,
+          endReason: input.reason as CricketInningsEndReason,
+        },
+      });
+    }
+    await this.prisma.cricketMatch.update({
+      where: { id: cricket.id },
+      data: { superOverPending: false, homePoints: 1, awayPoints: 1 },
+    });
+    await this.emitStandaloneUpdate(slug);
+    return this.getStandaloneScoreboard(slug);
   }
 }

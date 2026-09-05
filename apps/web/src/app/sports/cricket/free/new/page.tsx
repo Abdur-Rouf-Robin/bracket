@@ -8,7 +8,7 @@ import { SportNav } from '@/components/sport-nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { defaultBowlerLimits } from '@bracket/shared';
+import { CRICKET_FORMAT_PRESETS, cricketFormatPreset, defaultBowlerLimits, type CricketFormat } from '@bracket/shared';
 import { CricketCoinToss, type CoinTossResult } from '@/components/cricket-coin-toss-dynamic';
 import { api } from '@/lib/api';
 
@@ -33,7 +33,7 @@ export default function FreeCricketNewPage() {
   const router = useRouter();
   const [homeTeamName, setHomeTeamName] = useState('Team A');
   const [awayTeamName, setAwayTeamName] = useState('Team B');
-  const [format, setFormat] = useState<'T20' | 'ODI' | 'CUSTOM'>('T20');
+  const [format, setFormat] = useState<CricketFormat>('T20');
   const [maxOvers, setMaxOvers] = useState('20');
   const [ballsPerOver, setBallsPerOver] = useState('6');
   const [maxOversPerBowler, setMaxOversPerBowler] = useState('4');
@@ -64,11 +64,12 @@ export default function FreeCricketNewPage() {
     setAwayPlayers((rows) => resizeSquad(rows, 'away', n));
   }
 
-  function selectFormat(next: 'T20' | 'ODI' | 'CUSTOM') {
-    const overs = next === 'T20' ? 20 : next === 'ODI' ? 50 : 8;
+  function selectFormat(next: CricketFormat) {
+    const preset = cricketFormatPreset(next);
     setFormat(next);
-    setMaxOvers(String(overs));
-    const limits = defaultBowlerLimits(overs, next);
+    setMaxOvers(String(preset.maxOvers));
+    setBallsPerOver(String(preset.ballsPerOver));
+    const limits = defaultBowlerLimits(preset.maxOvers, next);
     setMaxOversPerBowler(String(limits.maxOversPerBowler));
     setMaxBowlersAtLimit(String(limits.maxBowlersAtLimit));
   }
@@ -76,7 +77,7 @@ export default function FreeCricketNewPage() {
   function onMaxOversChange(raw: string) {
     setMaxOvers(raw);
     const overs = Number(raw);
-    if (!Number.isFinite(overs) || overs < 1) return;
+    if (!Number.isFinite(overs) || overs < 0) return;
     if (format === 'CUSTOM') {
       const limits = defaultBowlerLimits(overs, 'CUSTOM');
       setMaxOversPerBowler(String(limits.maxOversPerBowler));
@@ -108,6 +109,7 @@ export default function FreeCricketNewPage() {
           format,
           maxOvers: Number(maxOvers),
           ballsPerOver: Number(ballsPerOver),
+          inningsCount: cricketFormatPreset(format).inningsCount,
           maxOversPerBowler: Number(maxOversPerBowler),
           maxBowlersAtLimit: Number(maxBowlersAtLimit),
           strikeRotationMode,
@@ -144,7 +146,7 @@ export default function FreeCricketNewPage() {
         </Link>
         <h1 className="font-display mt-4 text-3xl font-bold">Free scoreboard</h1>
         <p className="mt-2 text-[var(--color-muted)]">
-          Set any squad size (1–30 players per team). No international rules required.
+          T20, ODI, Test, The Hundred or custom — ICC defaults included, every option free.
         </p>
 
         <div className="gaming-card mt-8 space-y-6 rounded-xl p-6">
@@ -186,8 +188,8 @@ export default function FreeCricketNewPage() {
 
           <div>
             <Label>Format</Label>
-            <div className="mt-2 flex gap-2">
-              {(['T20', 'ODI', 'CUSTOM'] as const).map((f) => (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(Object.keys(CRICKET_FORMAT_PRESETS) as CricketFormat[]).map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -198,7 +200,7 @@ export default function FreeCricketNewPage() {
                       : 'border border-[var(--color-line)]'
                   }`}
                 >
-                  {f}
+                    {CRICKET_FORMAT_PRESETS[f].label}
                 </button>
               ))}
             </div>
@@ -206,10 +208,10 @@ export default function FreeCricketNewPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label>Overs per innings</Label>
+              <Label>Overs per innings (0 = unlimited)</Label>
               <Input
                 type="number"
-                min={1}
+                min={0}
                 max={300}
                 className="mt-1"
                 value={maxOvers}

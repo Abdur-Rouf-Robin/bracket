@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from './prisma/prisma.service';
@@ -39,6 +41,21 @@ export class HealthController {
       service: 'bracket-api',
       db,
       redis,
+      email: !!this.config.get<string>('RESEND_API_KEY'),
+      appUrl: (this.config.get<string>('APP_URL') ?? '').replace(/\/$/, '') || null,
+      backupLastAt: this.lastBackupAt(),
     };
+  }
+
+  private lastBackupAt(): string | null {
+    const dir =
+      this.config.get<string>('BRACKET_BACKUP_DIR') ??
+      join(process.cwd(), '..', '..', 'backups');
+    try {
+      const raw = readFileSync(join(dir, '.last-ok'), 'utf8').trim();
+      return raw || null;
+    } catch {
+      return null;
+    }
   }
 }

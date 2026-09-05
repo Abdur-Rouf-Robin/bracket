@@ -9,7 +9,10 @@ import {
   bowlingLegalBallsFromRows,
   canSelectBowler,
   defaultBowlerLimits,
+  CRICKET_FORMAT_PRESETS,
+  cricketFormatPreset,
   type BowlerLimitSettings,
+  type CricketFormat,
   type CricketBallInput,
   type CricketScoreboard,
   type CricketWicketType,
@@ -21,16 +24,12 @@ import { CricketCoinToss } from '@/components/cricket-coin-toss-dynamic';
 import { api } from '@/lib/api';
 import type { Match, Team, Tournament } from '@/lib/types';
 
-const FORMAT_DEFAULT_OVERS: Record<'T20' | 'ODI' | 'CUSTOM', number> = {
-  T20: 20,
-  ODI: 50,
-  CUSTOM: 8,
-};
+const SETUP_FORMATS = Object.keys(CRICKET_FORMAT_PRESETS) as CricketFormat[];
 
 function parseSetupOvers(value: string, label = 'Overs') {
   const maxOvers = Number(value);
-  if (!Number.isFinite(maxOvers) || maxOvers < 1 || maxOvers > 300) {
-    throw new Error(`${label} must be between 1 and 300`);
+  if (!Number.isFinite(maxOvers) || maxOvers < 0 || maxOvers > 300) {
+    throw new Error(`${label} must be between 0 (unlimited) and 300`);
   }
   return maxOvers;
 }
@@ -66,7 +65,7 @@ function isStandalone(p: Props): p is StandaloneProps {
   return p.variant === 'standalone';
 }
 
-function playersForTeam(team?: Team | null) {
+function playersForTeam(team?: { players?: Array<{ id: string; name: string }> } | null) {
   return team?.players ?? [];
 }
 
@@ -128,7 +127,7 @@ export function CricketScoreboardPanel(props: Props) {
   const [fielderId, setFielderId] = useState('');
   const [dlsOvers, setDlsOvers] = useState('');
 
-  const [setupFormat, setSetupFormat] = useState<'T20' | 'ODI' | 'CUSTOM'>('T20');
+  const [setupFormat, setSetupFormat] = useState<CricketFormat>('T20');
   const [customMaxOvers, setCustomMaxOvers] = useState('20');
   const [customBallsPerOver, setCustomBallsPerOver] = useState('6');
   const [maxOversPerBowler, setMaxOversPerBowler] = useState('4');
@@ -335,14 +334,16 @@ export function CricketScoreboardPanel(props: Props) {
       ballsPerOver: parseBallsPerOver(customBallsPerOver),
       maxOversPerBowler: parseSetupOvers(maxOversPerBowler, 'Max overs per bowler'),
       maxBowlersAtLimit: parseSetupOvers(maxBowlersAtLimit, 'Bowlers at max'),
+      inningsCount: cricketFormatPreset(setupFormat).inningsCount,
     };
   }
 
-  function selectSetupFormat(format: 'T20' | 'ODI' | 'CUSTOM') {
+  function selectSetupFormat(format: CricketFormat) {
     setSetupFormat(format);
-    const overs = FORMAT_DEFAULT_OVERS[format];
-    setCustomMaxOvers(String(overs));
-    const limits = defaultBowlerLimits(overs, format);
+    const preset = cricketFormatPreset(format);
+    setCustomMaxOvers(String(preset.maxOvers));
+    setCustomBallsPerOver(String(preset.ballsPerOver));
+    const limits = defaultBowlerLimits(preset.maxOvers, format);
     setMaxOversPerBowler(String(limits.maxOversPerBowler));
     setMaxBowlersAtLimit(String(limits.maxBowlersAtLimit));
   }
@@ -375,10 +376,11 @@ export function CricketScoreboardPanel(props: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
+  const parsedCustomOvers = Number(customMaxOvers);
   const inningsMaxOvers =
     activeInnings?.revisedMaxOvers ??
     board?.maxOvers ??
-    (Number(customMaxOvers) || 20);
+    (Number.isFinite(parsedCustomOvers) ? parsedCustomOvers : 20);
 
   const startMut = useMutation({
     mutationFn: async () => {
@@ -481,6 +483,13 @@ export function CricketScoreboardPanel(props: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
+  const followOnMut = useMutation({
+    mutationFn: (enforce: boolean) =>
+      api<CricketScoreboard>(`${apiBase}/follow-on`, apiOpts('POST', { enforce })),
+    onSuccess: (data) => qc.setQueryData(boardKey, data),
+    onError: (e: Error) => setError(e.message),
+  });
+
   const dlsMut = useMutation({
     mutationFn: () =>
       api<CricketScoreboard>(`${apiBase}/dls`, apiOpts('POST', {
@@ -514,7 +523,7 @@ export function CricketScoreboardPanel(props: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
-  const superOverPending = board?.superOverPending && !standalone;
+  const superOverPending = !!board?.superOverPending;
 
   const homeHasPlayers = standalone
     ? (board?.homeRoster?.length ?? 0) > 0
@@ -543,39 +552,39 @@ export function CricketScoreboardPanel(props: Props) {
     ).length ?? 0;
 
   const superOverTeams = useMemo(() => {
-    if (!board || !match || standalone) return null;
+    if (!board) return null;
     const regular = board.innings.filter((i) => !i.isSuperOver);
-    const second = regular.find((i) => i.inningsNumber === 2);
+    const second =
+      regular.find((i) => i.inningsNumber === 2) ??
+      [...regular].reverse().find((i) => i.status === CricketInningsStatus.COMPLETED);
     const superDone = board.innings.filter(
       (i) => i.isSuperOver && i.status === CricketInningsStatus.COMPLETED,
     );
+    const teamFor = (id: string) => {
+      if (standalone) {
+        return {
+          id,
+          players: id === 'home' ? (board.homeRoster ?? []) : (board.awayRoster ?? []),
+        };
+      }
+      if (!match) return { id, players: [] };
+      return id === match.homeTeamId ? match.homeTeam : match.awayTeam;
+    };
     if (superDone.length >= 1) {
       const firstSo = superDone[0]!;
       return {
         battingTeamId: firstSo.bowlingTeamId,
         bowlingTeamId: firstSo.battingTeamId,
-        battingTeam:
-          firstSo.bowlingTeamId === match.homeTeamId
-            ? match.homeTeam
-            : match.awayTeam,
-        bowlingTeam:
-          firstSo.battingTeamId === match.homeTeamId
-            ? match.homeTeam
-            : match.awayTeam,
+        battingTeam: teamFor(firstSo.bowlingTeamId),
+        bowlingTeam: teamFor(firstSo.battingTeamId),
       };
     }
     if (second) {
       return {
         battingTeamId: second.battingTeamId,
         bowlingTeamId: second.bowlingTeamId,
-        battingTeam:
-          second.battingTeamId === match.homeTeamId
-            ? match.homeTeam
-            : match.awayTeam,
-        bowlingTeam:
-          second.bowlingTeamId === match.homeTeamId
-            ? match.homeTeam
-            : match.awayTeam,
+        battingTeam: teamFor(second.battingTeamId),
+        bowlingTeam: teamFor(second.bowlingTeamId),
       };
     }
     return null;
@@ -611,7 +620,7 @@ export function CricketScoreboardPanel(props: Props) {
         runsOffBat: 0,
         extraType: 'NONE',
         extraRuns: 0,
-        isWicket: true,
+        isWicket: wicketType !== 'RETIRED_HURT',
         wicketType,
         dismissedPlayerId: dismissedId,
         fielderId: fielderId || undefined,
@@ -674,8 +683,15 @@ export function CricketScoreboardPanel(props: Props) {
           </p>
           {board?.configured && (
             <p className="mt-1 text-xs text-[var(--color-muted)]">
-              {board.format ?? 'Match'} · {board.maxOvers} overs · {board.ballsPerOver} balls/over
-              · max {board.maxOversPerBowler} overs/bowler ({board.maxBowlersAtLimit} at full quota)
+              {CRICKET_FORMAT_PRESETS[board.format ?? 'T20']?.label ?? board.format ?? 'Match'}
+              {' · '}
+              {board.maxOvers <= 0 ? 'unlimited overs' : `${board.maxOvers} overs`}
+              {' · '}
+              {board.ballsPerOver} balls/over
+              {board.maxOversPerBowler < 100
+                ? ` · max ${board.maxOversPerBowler} overs/bowler (${board.maxBowlersAtLimit} at full quota)`
+                : ''}
+              {board.followOn?.enforced ? ' · follow-on enforced' : ''}
             </p>
           )}
           {board?.matchSummary.homePoints != null && (
@@ -697,8 +713,14 @@ export function CricketScoreboardPanel(props: Props) {
             <p className="font-display text-4xl font-bold tabular-nums">
               {activeInnings.runs}/{activeInnings.wickets}
             </p>
+            {board?.powerplay?.active && (
+              <p className="text-xs font-semibold text-amber-700">
+                Powerplay · {board.powerplay.ballsUsed}/{board.powerplay.ballsTotal} balls
+              </p>
+            )}
             <p className="font-mono text-sm text-[var(--color-muted)]">
-              ({activeInnings.oversDisplay}/{inningsMaxOvers} ov) · RR {activeInnings.runRate}
+              ({activeInnings.oversDisplay}
+              {inningsMaxOvers > 0 ? `/${inningsMaxOvers}` : ''} ov) · RR {activeInnings.runRate}
               {activeInnings.requiredRunRate != null &&
                 ` · RRR ${activeInnings.requiredRunRate}`}
               {activeInnings.targetRuns != null &&
@@ -820,6 +842,19 @@ export function CricketScoreboardPanel(props: Props) {
         </section>
       )}
 
+      {canEdit && !activeInnings && !superOverPending && board?.followOn?.available && (
+        <section className="gaming-card rounded-xl border-amber-500/40 p-5 space-y-3">
+          <h3 className="font-display font-bold">Follow-on available</h3>
+          <p className="text-sm text-[var(--color-muted)]">
+            Lead of {board.followOn.lead} runs after two innings (ICC margin {board.followOn.margin}).
+            Enforce the follow-on so the side batting second bats again.
+          </p>
+          <Button onClick={() => followOnMut.mutate(true)} disabled={followOnMut.isPending}>
+            Enforce follow-on
+          </Button>
+        </section>
+      )}
+
       {canEdit && !activeInnings && !superOverPending && (
         <section className="gaming-card rounded-xl p-5 space-y-4">
           <h3 className="font-display font-bold">Start innings</h3>
@@ -829,7 +864,7 @@ export function CricketScoreboardPanel(props: Props) {
                 Choose format and overs — used for run rate, projected score, and NRR.
               </p>
               <div className="flex flex-wrap gap-2">
-                {(['T20', 'ODI', 'CUSTOM'] as const).map((f) => (
+                {SETUP_FORMATS.map((f) => (
                   <button
                     key={f}
                     type="button"
@@ -840,7 +875,7 @@ export function CricketScoreboardPanel(props: Props) {
                         : 'border border-[var(--color-line)]'
                     }`}
                   >
-                    {f}
+                    {CRICKET_FORMAT_PRESETS[f].label}
                   </button>
                 ))}
               </div>
@@ -856,6 +891,12 @@ export function CricketScoreboardPanel(props: Props) {
               >
                 <option value={1}>1st innings</option>
                 <option value={2}>2nd innings</option>
+                {(board?.inningsCount ?? cricketFormatPreset(setupFormat).inningsCount) >= 3 && (
+                  <option value={3}>3rd innings</option>
+                )}
+                {(board?.inningsCount ?? cricketFormatPreset(setupFormat).inningsCount) >= 4 && (
+                  <option value={4}>4th innings</option>
+                )}
               </select>
             </div>
             <div>
@@ -896,10 +937,10 @@ export function CricketScoreboardPanel(props: Props) {
             {!matchScoringStarted && (
               <>
                 <div>
-                  <Label>Overs per innings</Label>
+                  <Label>Overs per innings (0 = unlimited)</Label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     max={300}
                     className="mt-1 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-paper)] px-3 py-2"
                     value={customMaxOvers}
@@ -1375,7 +1416,7 @@ export function CricketScoreboardPanel(props: Props) {
                   value={wicketType}
                   onChange={(e) => setWicketType(e.target.value as CricketWicketType)}
                 >
-                  {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET', 'RETIRED', 'OTHER'].map(
+                  {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET', 'RETIRED', 'RETIRED_HURT', 'OBSTRUCTING', 'TIMED_OUT', 'OTHER'].map(
                     (w) => (
                       <option key={w} value={w}>{w.replaceAll('_', ' ')}</option>
                     ),

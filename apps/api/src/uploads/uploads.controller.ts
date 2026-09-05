@@ -15,7 +15,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads');
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 25 * 1024 * 1024;
 const ALLOWED = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
 if (!existsSync(UPLOAD_DIR)) {

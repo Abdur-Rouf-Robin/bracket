@@ -147,7 +147,7 @@ export class PdfService {
       appUrl,
       accent,
       tz: tournamentTz(t),
-      hideBranding: settings.hideBranding && ownerPlan === 'PREMIER',
+      hideBranding: !!settings.hideBranding,
       totalRounds: knockoutRoundCount(t.matches),
     };
   }

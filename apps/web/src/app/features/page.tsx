@@ -9,7 +9,7 @@ import { FEATURE_SECTIONS } from '@/lib/plans';
 export const metadata: Metadata = {
   title: 'Features',
   description:
-    'Compare Standard and Premier: formats, tournament pages, registration, scheduling, sharing, communities, integrations and support.',
+    'Every format, game catalog, scheduler, export and cricket scoreboard is included — free forever.',
 };
 
 export default function FeaturesPage() {
@@ -19,7 +19,7 @@ export default function FeaturesPage() {
         <SectionHeading
           eyebrow="Features"
           title="Everything you need to run a tournament"
-          description="Standard is free and complete. Premier removes ads and adds the tools serious organizers ask for."
+          description="Score7-simple to run, Challonge-deep in options. Nothing is locked behind a subscription."
         />
         <nav aria-label="Feature sections" className="mt-8 flex flex-wrap justify-center gap-2">
           {FEATURE_SECTIONS.map((s) => (
@@ -49,7 +49,7 @@ export default function FeaturesPage() {
             .
           </p>
           <Button size="lg" asChild>
-            <Link href="/pricing">See pricing <ArrowRight /></Link>
+            <Link href="/register">Start free <ArrowRight /></Link>
           </Button>
         </div>
       </section>

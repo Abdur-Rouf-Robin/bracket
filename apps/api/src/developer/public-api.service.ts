@@ -298,12 +298,12 @@ export class PublicApiService {
     if (t.status === TournamentStatus.COMPLETED) {
       return { id: t.id, slug: t.slug, status: t.status, alreadyCompleted: true };
     }
-    const updated = await this.prisma.tournament.update({
-      where: { id: t.id },
-      data: { status: TournamentStatus.COMPLETED, completedAt: new Date() },
-      select: { id: true, slug: true, status: true, completedAt: true },
-    });
-    void this.webhooks.dispatchEvent('tournament.completed', t.id, { source: 'api' });
-    return updated;
+    const updated = await this.tournaments.applyCompletedStatus(t.id);
+    return {
+      id: updated.id,
+      slug: updated.slug,
+      status: updated.status,
+      completedAt: updated.completedAt,
+    };
   }
 }

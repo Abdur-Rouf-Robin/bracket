@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TournamentSeo } from '@/components/tournament-seo';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
-import { AdSlot } from '@/components/ads/ad-slot';
 import { TournamentHero } from '@/components/tournament-hero';
 import { TournamentPasswordGate } from '@/components/tournament-password-gate';
 import { tournamentBrandStyle } from '@/components/sharing/brand-style';
@@ -94,8 +93,6 @@ export default function PublicTournamentPage() {
       (t) => t.registeredByUserId === user.id && !t.checkedIn && !t.withdrawn,
     );
 
-  const showAds = data?.viewerPlan !== 'PREMIER';
-
   return (
     <div className="flex min-h-screen flex-col" style={tournamentBrandStyle(data)}>
       <TournamentSeo slug={slug} />
@@ -145,25 +142,18 @@ export default function PublicTournamentPage() {
               activeSub={sub}
             />
 
-            <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_auto]">
-              <div className="min-w-0">
-                <TournamentTabContent
-                  tournament={data}
-                  tab={tab}
-                  sub={sub}
-                  mode="public"
-                  basePath={basePath}
-                  mvpRows={mvpRows}
-                  token={token ?? undefined}
-                  userId={user?.id}
-                  onCheckInSelf={checkInSelf}
-                />
-              </div>
-              {showAds && process.env.NEXT_PUBLIC_ADS_ENABLED === 'true' && (
-                <div className="no-print hidden xl:block xl:w-[300px]">
-                  <AdSlot plan={data.viewerPlan ?? 'FREE'} className="sticky top-32" />
-                </div>
-              )}
+            <div className="mt-6 min-w-0">
+              <TournamentTabContent
+                tournament={data}
+                tab={tab}
+                sub={sub}
+                mode="public"
+                basePath={basePath}
+                mvpRows={mvpRows}
+                token={token ?? undefined}
+                userId={user?.id}
+                onCheckInSelf={checkInSelf}
+              />
             </div>
           </TournamentPasswordGate>
         )}

@@ -37,6 +37,8 @@ export type User = {
   emailVerified?: boolean;
   countryCode?: string | null;
   createdAt?: string;
+  mustChangePassword?: boolean;
+  emailConfigured?: boolean;
 };
 
 type AuthState = {

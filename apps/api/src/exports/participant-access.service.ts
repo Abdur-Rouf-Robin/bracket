@@ -7,11 +7,14 @@ import { createHash, randomBytes } from 'crypto';
 import { formatInTimeZone } from 'date-fns-tz';
 import {
   tournamentSettingsSchema,
+  type MatchResultInput,
   type ParticipantAccessMatch,
   type ParticipantAccessPayload,
+  type PlayerHubItem,
 } from '@bracket/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
+import { MatchesService } from '../matches/matches.service';
 import { EXPORT_INCLUDE, PublicAccessService, type ExportMatch } from './public-access.service';
 import { knockoutRoundCount, roundLabelFor, stationName } from './export-format.util';
 
@@ -29,6 +32,7 @@ export class ParticipantAccessService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly pub: PublicAccessService,
+    private readonly matches: MatchesService,
   ) {}
 
   private url(token: string) {
@@ -96,7 +100,42 @@ export class ParticipantAccessService {
     if (!settings.participantAccessPages) {
       throw new BadRequestException('Participant access pages are disabled for this tournament');
     }
+    return this.buildPayload(team, t, settings);
+  }
 
+  private buildPayload(
+    team: {
+      id: string;
+      name: string;
+      seed: number | null;
+      logoUrl: string | null;
+      checkedIn: boolean;
+      withdrawn: boolean;
+      players: { name: string }[];
+    },
+    t: {
+      id: string;
+      slug: string;
+      name: string;
+      timezone: string;
+      logoUrl: string | null;
+      status: string;
+      format: string | null;
+      matches: ExportMatch[];
+      standings: {
+        teamId: string;
+        groupId: string | null;
+        rank: number;
+        played: number;
+        wins: number;
+        losses: number;
+        draws: number;
+        points: number;
+        group?: { name: string } | null;
+      }[];
+    },
+    settings: ReturnType<typeof tournamentSettingsSchema.parse>,
+  ): ParticipantAccessPayload {
     const total = knockoutRoundCount(t.matches);
     const mine = t.matches
       .filter((m) => !m.isBye && (m.homeTeamId === team.id || m.awayTeamId === team.id))
@@ -131,6 +170,20 @@ export class ParticipantAccessService {
       { wins: 0, losses: 0, draws: 0 },
     );
 
+    const requireCheckIn = settings.requireCheckIn;
+    const canCheckIn =
+      requireCheckIn &&
+      !team.checkedIn &&
+      !team.withdrawn &&
+      t.status !== 'COMPLETED';
+    const canReportScore =
+      settings.allowParticipantsReportScores &&
+      t.status === 'ACTIVE' &&
+      !!nextMatch &&
+      nextMatch.status !== 'COMPLETED' &&
+      !!nextMatch.opponent &&
+      (!requireCheckIn || team.checkedIn);
+
     return {
       team: {
         id: team.id,
@@ -138,6 +191,7 @@ export class ParticipantAccessService {
         seed: settings.hideSeedNumbers ? null : team.seed,
         logoUrl: team.logoUrl,
         players: team.players.map((p) => p.name),
+        checkedIn: team.checkedIn,
       },
       tournament: {
         id: t.id,
@@ -163,7 +217,140 @@ export class ParticipantAccessService {
           }
         : null,
       record,
+      actions: {
+        requireCheckIn,
+        checkedIn: team.checkedIn,
+        canCheckIn,
+        canReportScore,
+      },
     };
+  }
+
+  async checkIn(token: string) {
+    const { team, tournament, settings } = await this.loadTeamFromToken(token);
+    if (!settings.requireCheckIn) {
+      throw new BadRequestException('Check-in is not required for this tournament');
+    }
+    if (tournament.status === 'COMPLETED') {
+      throw new BadRequestException('This tournament is already finished');
+    }
+    if (team.withdrawn) throw new BadRequestException('This team has withdrawn');
+    if (team.checkedIn) return this.resolve(token);
+    await this.prisma.team.update({
+      where: { id: team.id },
+      data: { checkedIn: true, checkedInAt: new Date() },
+    });
+    return this.resolve(token);
+  }
+
+  async reportResult(token: string, matchId: string, input: MatchResultInput) {
+    const { team } = await this.loadTeamFromToken(token);
+    await this.matches.setResult(matchId, null, input, { teamId: team.id });
+    return this.resolve(token);
+  }
+
+  async playHub(userId: string): Promise<PlayerHubItem[]> {
+    const teams = await this.prisma.team.findMany({
+      where: {
+        registeredByUserId: userId,
+        withdrawn: false,
+        tournament: { status: { in: ['DRAFT', 'ACTIVE'] } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      include: {
+        tournament: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            status: true,
+            logoUrl: true,
+            settings: true,
+          },
+        },
+      },
+    });
+    const items: PlayerHubItem[] = [];
+    for (const team of teams) {
+      try {
+        const payload = await this.resolveFromTeamId(team.id);
+        if (payload) {
+          items.push({
+            team: {
+              id: payload.team.id,
+              name: payload.team.name,
+              checkedIn: payload.team.checkedIn,
+            },
+            tournament: {
+              id: payload.tournament.id,
+              slug: payload.tournament.slug,
+              name: payload.tournament.name,
+              status: payload.tournament.status,
+              logoUrl: payload.tournament.logoUrl,
+            },
+            nextMatch: payload.nextMatch,
+            requireCheckIn: payload.actions.requireCheckIn,
+            canCheckIn: payload.actions.canCheckIn,
+            canReportScore: payload.actions.canReportScore,
+          });
+          continue;
+        }
+      } catch {
+        // Fall through to a lightweight row if the access page is disabled.
+      }
+      const settings = tournamentSettingsSchema.parse(team.tournament.settings ?? {});
+      items.push({
+        team: { id: team.id, name: team.name, checkedIn: team.checkedIn },
+        tournament: {
+          id: team.tournament.id,
+          slug: team.tournament.slug,
+          name: team.tournament.name,
+          status: team.tournament.status,
+          logoUrl: team.tournament.logoUrl,
+        },
+        nextMatch: null,
+        requireCheckIn: settings.requireCheckIn,
+        canCheckIn: settings.requireCheckIn && !team.checkedIn,
+        canReportScore: false,
+      });
+    }
+    return items;
+  }
+
+  private async resolveFromTeamId(teamId: string): Promise<ParticipantAccessPayload | null> {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      include: { players: { orderBy: { order: 'asc' } }, group: true },
+    });
+    if (!team) return null;
+    const t = await this.prisma.tournament.findUnique({
+      where: { id: team.tournamentId },
+      include: EXPORT_INCLUDE,
+    });
+    if (!t) return null;
+    const settings = tournamentSettingsSchema.parse(t.settings ?? {});
+    if (!settings.participantAccessPages) return null;
+    return this.buildPayload(team, t, settings);
+  }
+
+  private async loadTeamFromToken(token: string) {
+    if (!token || token.length < 16 || token.length > 128) {
+      throw new NotFoundException('Invalid access link');
+    }
+    const team = await this.prisma.team.findUnique({
+      where: { accessTokenHash: hashToken(token) },
+    });
+    if (!team) throw new NotFoundException('This access link is not valid');
+    const tournament = await this.prisma.tournament.findUnique({
+      where: { id: team.tournamentId },
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+    const settings = tournamentSettingsSchema.parse(tournament.settings ?? {});
+    if (!settings.participantAccessPages) {
+      throw new BadRequestException('Participant access pages are disabled for this tournament');
+    }
+    return { team, tournament, settings };
   }
 
   /** iCalendar feed of the participant's matches. */

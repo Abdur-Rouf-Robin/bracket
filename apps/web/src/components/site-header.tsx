@@ -8,10 +8,12 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
+  CircleDot,
+  ClipboardList,
   Code2,
   Compass,
   CreditCard,
-  Crown,
+  Goal,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -43,6 +45,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { NotificationBell } from '@/components/inbox/notification-bell';
+import { MustChangePasswordBanner } from '@/components/account/must-change-password-banner';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +57,7 @@ export const CREATE_LINKS: NavLink[] = [
   { label: 'Community', href: '/communities/new', description: 'Your club, league or org', icon: <Users className="size-4" /> },
   { label: 'Event', href: '/events/new', description: 'Multi-tournament events & tickets', icon: <CalendarDays className="size-4" /> },
   { label: 'Quick bracket', href: '/bracket-generator', description: 'No account needed', icon: <Zap className="size-4" /> },
+  { label: 'Cricket scoreboard', href: '/sports/cricket/free/new', description: 'Ball-by-ball, no tournament needed', icon: <ClipboardList className="size-4" /> },
 ];
 
 export const DISCOVER_LINKS: NavLink[] = [
@@ -61,6 +65,13 @@ export const DISCOVER_LINKS: NavLink[] = [
   { label: 'Search', href: '/search', icon: <Search className="size-4" /> },
   { label: 'Communities', href: '/communities', icon: <Users className="size-4" /> },
   { label: 'Events', href: '/events', icon: <CalendarDays className="size-4" /> },
+  { label: 'Cricket', href: '/sports/cricket', icon: <CircleDot className="size-4" /> },
+];
+
+export const SPORTS_LINKS: NavLink[] = [
+  { label: 'Cricket scoreboard', href: '/sports/cricket/free/new', description: 'Start a free live board', icon: <ClipboardList className="size-4" /> },
+  { label: 'Cricket hub', href: '/sports/cricket', description: 'T20, ODI, Test & The Hundred', icon: <CircleDot className="size-4" /> },
+  { label: 'Football', href: '/sports/football', description: 'Goals, ET and penalties', icon: <Goal className="size-4" /> },
 ];
 
 export const FORMAT_LINKS: NavLink[] = [
@@ -77,6 +88,7 @@ export const FORMAT_LINKS: NavLink[] = [
 const NAV_GROUPS: NavGroup[] = [
   { label: 'Create', items: CREATE_LINKS },
   { label: 'Discover', items: DISCOVER_LINKS },
+  { label: 'Sports', items: SPORTS_LINKS },
   { label: 'Formats', items: FORMAT_LINKS },
 ];
 
@@ -159,8 +171,6 @@ function UserMenu() {
     avatarUrl?: string | null;
     plan?: 'FREE' | 'PREMIER';
   };
-  const premier = u.plan === 'PREMIER';
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -170,7 +180,6 @@ function UserMenu() {
           className="inline-flex items-center gap-2 rounded-full p-0.5 pr-1 transition hover:bg-[var(--color-surface)] data-[state=open]:bg-[var(--color-surface)]"
         >
           <Avatar name={u.name} src={u.avatarUrl} size="sm" />
-          {premier && <Crown className="size-3.5 text-[var(--color-premier)]" aria-label="Premier" />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
@@ -180,11 +189,7 @@ function UserMenu() {
             <p className="truncate text-sm font-semibold">{u.name}</p>
             <p className="truncate text-xs text-[var(--color-muted)]">{u.email}</p>
           </div>
-          {premier ? (
-            <Badge variant="premier" className="ml-auto">Premier</Badge>
-          ) : (
-            <Badge variant="neutral" className="ml-auto">Standard</Badge>
-          )}
+          <Badge variant="neutral" className="ml-auto">Free</Badge>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -195,6 +200,9 @@ function UserMenu() {
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/events?mine=1"><CalendarDays className="size-4" /> My events</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/play"><Trophy className="size-4" /> My matches</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -210,16 +218,6 @@ function UserMenu() {
           <DropdownMenuItem asChild>
             <Link href="/admin"><Shield className="size-4" /> Admin</Link>
           </DropdownMenuItem>
-        )}
-        {!premier && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/pricing" className="text-[var(--color-premier)]">
-                <Sparkles className="size-4" /> Upgrade to Premier
-              </Link>
-            </DropdownMenuItem>
-          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem destructive onSelect={() => logout()}>
@@ -289,6 +287,7 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
               { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="size-4" /> },
               { label: 'My communities', href: '/communities?mine=1', icon: <Users className="size-4" /> },
               { label: 'My events', href: '/events?mine=1', icon: <CalendarDays className="size-4" /> },
+              { label: 'My matches', href: '/play', icon: <Trophy className="size-4" /> },
               { label: 'Notifications', href: '/inbox', icon: <Sparkles className="size-4" /> },
               { label: 'Settings', href: '/settings', icon: <Settings className="size-4" /> },
               { label: 'Billing', href: '/settings/billing', icon: <CreditCard className="size-4" /> },
@@ -297,6 +296,7 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
             ])}
           {section('Create', CREATE_LINKS)}
           {section('Discover', DISCOVER_LINKS)}
+          {section('Sports', SPORTS_LINKS)}
           {section('Formats', FORMAT_LINKS)}
           {section('More', [
             { label: 'Features', href: '/features', icon: <Sparkles className="size-4" /> },
@@ -331,9 +331,10 @@ export function SiteHeader({ className }: { className?: string }) {
   const showUser = mounted && !!user;
 
   return (
+    <div className="sticky top-0 z-50">
     <header
       className={cn(
-        'glass sticky top-0 z-50 border-b border-[var(--color-line)]',
+        'glass border-b border-[var(--color-line)]',
         className,
       )}
     >
@@ -354,7 +355,8 @@ export function SiteHeader({ className }: { className?: string }) {
         <nav aria-label="Primary" className="hidden items-center gap-0.5 lg:flex">
           <NavDropdown group={NAV_GROUPS[0]!} />
           <NavDropdown group={NAV_GROUPS[1]!} />
-          <NavDropdown group={NAV_GROUPS[2]!} wide />
+          <NavDropdown group={NAV_GROUPS[2]!} />
+          <NavDropdown group={NAV_GROUPS[3]!} wide />
           {TOP_LINKS.map((l) => {
             const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (
@@ -400,5 +402,7 @@ export function SiteHeader({ className }: { className?: string }) {
         </div>
       </div>
     </header>
+    <MustChangePasswordBanner />
+    </div>
   );
 }

@@ -37,7 +37,7 @@ export default function TermsPage() {
           </ul>
 
           <h2>4. Plans, payments and refunds</h2>
-          <p>Standard is free. Premier is billed monthly or yearly in advance through our payment processor and renews automatically until cancelled. You can cancel at any time; access continues until the end of the paid period. Fees are non-refundable except where required by law. Entry fees and ticket sales are processed through your own connected payment account and are subject to the processor’s terms; a platform fee may apply.</p>
+          <p>The platform is free. There is no organizer subscription. Entry fees and ticket sales, if you choose to collect them, are processed through your own connected payment account and are subject to the processor’s terms.</p>
 
           <h2>5. Availability and changes</h2>
           <p>We aim for high availability but the Service is provided “as is” without warranties of any kind. We may modify or discontinue features with reasonable notice. We may suspend accounts that violate these Terms.</p>

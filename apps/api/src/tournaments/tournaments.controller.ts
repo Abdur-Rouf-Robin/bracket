@@ -272,6 +272,16 @@ export class TournamentsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/complete')
+  complete(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.tournaments.complete(id, user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post('tournaments/:id/reopen')
   reopen(
     @Param('id') id: string,

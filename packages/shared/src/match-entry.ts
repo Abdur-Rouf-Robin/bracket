@@ -33,7 +33,7 @@ export const matchMetaSchema = z
         firstBattingTeamId: z.string(),
         innings: z.array(
           z.object({
-            inningsNumber: z.number().int().min(1).max(2),
+            inningsNumber: z.number().int().min(1).max(4),
             battingTeamId: z.string(),
             runs: z.number().int().min(0),
             wickets: z.number().int().min(0),

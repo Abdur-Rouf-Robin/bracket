@@ -8,10 +8,12 @@ import { AuthModule } from '../auth/auth.module';
 import { MvpModule } from '../mvp/mvp.module';
 import { ShareImagesModule } from '../share-images/share-images.module';
 import { BracketModule } from '../bracket/bracket.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule,
     forwardRef(() => RealtimeModule),
     forwardRef(() => JobsModule),
     BracketModule,

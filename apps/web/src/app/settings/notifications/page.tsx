@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { SettingsShell } from '@/components/account/settings-shell';
 import { InboxList } from '@/components/account/inbox-list';
-import { Toggle } from '@/components/registrations/registration-ui';
+import { NotificationPreferences } from '@/components/account/notification-preferences';
 
 export default function SettingsNotificationsPage() {
   return (
@@ -15,14 +15,11 @@ export default function SettingsNotificationsPage() {
         <section className="gaming-card rounded-2xl p-6">
           <h2 className="font-display text-lg font-semibold">Channels</h2>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
-            Per-channel preferences are coming soon. Right now you receive in-app notifications
-            and transactional emails for registration changes.
+            These choices are saved to your account. Password reset and email
+            verification always send.
           </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <Toggle label="In-app notifications" checked disabled onChange={() => undefined} />
-            <Toggle label="Email for registration updates" checked disabled onChange={() => undefined} />
-            <Toggle label="Email for match comments" checked={false} disabled onChange={() => undefined} hint="Coming soon" />
-            <Toggle label="Weekly digest" checked={false} disabled onChange={() => undefined} hint="Coming soon" />
+          <div className="mt-3">
+            <NotificationPreferences />
           </div>
         </section>
         <section>

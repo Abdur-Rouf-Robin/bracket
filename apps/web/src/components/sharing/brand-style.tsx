@@ -79,10 +79,10 @@ export function TournamentBrandStyle({
   );
 }
 
-/** Whether "Powered by Bracket" chrome should be hidden (Premier + setting). */
+/** Whether "Powered by Bracket" chrome should be hidden. */
 export function shouldHideBranding(
   tournament: Pick<Tournament, 'settings' | 'viewerPlan'> | null | undefined,
 ): boolean {
   const s = (tournament?.settings ?? {}) as BrandSettings;
-  return !!s.hideBranding && tournament?.viewerPlan === 'PREMIER';
+  return !!s.hideBranding;
 }

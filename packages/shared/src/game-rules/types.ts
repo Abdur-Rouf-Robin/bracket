@@ -2,13 +2,18 @@ import type { TournamentSettings } from '../index';
 import type { MatchEntryMode } from '../match-entry';
 import type { MvpWeights } from '../mvp';
 
-export type GameCategory = 'Esports' | 'Outdoor';
+export type GameCategory = 'Esports' | 'Sports' | 'Outdoor';
 export type GameSubcategory =
   | 'shooting'
   | 'moba'
   | 'football-sim'
   | 'strategy'
-  | 'outdoor';
+  | 'outdoor'
+  | 'racing'
+  | 'fighting'
+  | 'table'
+  | 'board'
+  | 'sports-sim';
 
 export type MvpStatField =
   | 'goals'

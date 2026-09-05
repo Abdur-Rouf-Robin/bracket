@@ -448,10 +448,35 @@ function TournamentsTab({ data }: { data: CommunityPagePayload }) {
 }
 
 function EventsTab({ data }: { data: CommunityPagePayload }) {
+  const canCreate = communityRoleAtLeast(data.viewerRole, 'COLLABORATOR');
   if (data.events.length === 0) {
-    return <EmptyState>No upcoming events.</EmptyState>;
+    return (
+      <EmptyState>
+        No upcoming events.
+        {canCreate && (
+          <>
+            {' '}
+            <Link
+              href={`/events/new?community=${data.community.id}`}
+              className="text-[var(--color-accent)] underline"
+            >
+              Create one
+            </Link>
+            .
+          </>
+        )}
+      </EmptyState>
+    );
   }
   return (
+    <div>
+      {canCreate && (
+        <div className="mb-4 flex justify-end">
+          <Link href={`/events/new?community=${data.community.id}`}>
+            <Button variant="secondary">Create event</Button>
+          </Link>
+        </div>
+      )}
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {data.events.map((e) => (
         <Link
@@ -482,6 +507,7 @@ function EventsTab({ data }: { data: CommunityPagePayload }) {
           </div>
         </Link>
       ))}
+    </div>
     </div>
   );
 }

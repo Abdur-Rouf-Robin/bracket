@@ -17,6 +17,7 @@ import {
   cricketDeclareSchema,
   cricketDlsSchema,
   cricketStartSuperOverSchema,
+  cricketFollowOnSchema,
   cricketAbandonSchema,
   cricketManualReportSchema,
   cricketTossSchema,
@@ -29,6 +30,7 @@ import {
   type CricketSetupInput,
   type CricketStartInningsInput,
   type CricketStartSuperOverInput,
+  type CricketFollowOnInput,
   type CricketAbandonInput,
   type CricketManualReportInput,
   type CricketTossInput,
@@ -159,6 +161,18 @@ export class CricketController {
     @Body(new ZodValidationPipe(cricketDlsSchema)) body: CricketDlsInput,
   ) {
     return this.cricket.applyDls(matchId, user.id, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('follow-on')
+  enforceFollowOn(
+    @Param('matchId') matchId: string,
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(cricketFollowOnSchema))
+    body: CricketFollowOnInput,
+  ) {
+    return this.cricket.enforceFollowOn(matchId, user.id, body);
   }
 
   @ApiBearerAuth()

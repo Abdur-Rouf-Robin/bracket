@@ -105,6 +105,30 @@ export const inboxNotifySchema = z.object({
 });
 export type InboxNotifyInput = z.infer<typeof inboxNotifySchema>;
 
+export const INBOX_PREF_DEFAULTS = {
+  inApp: true,
+  emailRegistration: true,
+  emailMatchComments: false,
+  emailMatchReady: true,
+  emailFinalResults: true,
+} as const;
+
+export const inboxPreferencesSchema = z.object({
+  inApp: z.boolean(),
+  emailRegistration: z.boolean(),
+  emailMatchComments: z.boolean(),
+  emailMatchReady: z.boolean(),
+  emailFinalResults: z.boolean(),
+});
+export type InboxPreferences = z.infer<typeof inboxPreferencesSchema>;
+
+export const updateInboxPreferencesSchema = inboxPreferencesSchema.partial();
+export type UpdateInboxPreferencesInput = z.infer<typeof updateInboxPreferencesSchema>;
+
+export type InboxEmailChannel = Exclude<keyof InboxPreferences, 'inApp'>;
+
+export type InboxPreferencesResponse = InboxPreferences & { persisted: true };
+
 /** Curated IANA timezones for the account settings picker. */
 export const ACCOUNT_TIMEZONES: string[] = [
   'UTC',

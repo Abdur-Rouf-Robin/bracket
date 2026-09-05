@@ -139,7 +139,7 @@ export function AccountPanel() {
           <div>
             <dt className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Plan</dt>
             <dd className="font-medium">
-              {account.plan === 'PREMIER' ? 'Premier' : 'Free'}
+              Free forever
               {account.planExpiresAt ? (
                 <span className="block text-xs text-[var(--color-muted)]">
                   until {new Date(account.planExpiresAt).toLocaleDateString()}

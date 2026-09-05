@@ -10,6 +10,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
       { label: 'Pricing', href: '/pricing' },
       { label: 'Bracket generator', href: '/bracket-generator' },
       { label: 'Formats', href: '/formats/single-elimination' },
+      { label: 'Cricket scoreboard', href: '/sports/cricket/free/new' },
     ],
   },
   {

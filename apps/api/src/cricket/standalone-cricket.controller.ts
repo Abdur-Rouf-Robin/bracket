@@ -18,6 +18,9 @@ import {
   cricketSetupSchema,
   cricketStandaloneStartInningsSchema,
   cricketStandaloneTossSchema,
+  cricketStartSuperOverSchema,
+  cricketFollowOnSchema,
+  cricketAbandonSchema,
   type CricketBallInput,
   type CricketChangeBowlerInput,
   type CricketSetBatsmenInput,
@@ -28,6 +31,9 @@ import {
   type CricketSetupInput,
   type CricketStandaloneStartInningsInput,
   type CricketStandaloneTossInput,
+  type CricketStartSuperOverInput,
+  type CricketFollowOnInput,
+  type CricketAbandonInput,
 } from '@bracket/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { CricketService } from './cricket.service';
@@ -147,5 +153,35 @@ export class StandaloneCricketController {
     @Body(new ZodValidationPipe(cricketDlsSchema)) body: CricketDlsInput,
   ) {
     return this.cricket.applyStandaloneDls(slug, token, body);
+  }
+
+  @Post(':slug/follow-on')
+  enforceFollowOn(
+    @Param('slug') slug: string,
+    @Headers(EDIT_HEADER) token: string,
+    @Body(new ZodValidationPipe(cricketFollowOnSchema))
+    body: CricketFollowOnInput,
+  ) {
+    return this.cricket.enforceStandaloneFollowOn(slug, token, body);
+  }
+
+  @Post(':slug/super-over/start')
+  startSuperOver(
+    @Param('slug') slug: string,
+    @Headers(EDIT_HEADER) token: string,
+    @Body(new ZodValidationPipe(cricketStartSuperOverSchema))
+    body: CricketStartSuperOverInput,
+  ) {
+    return this.cricket.startStandaloneSuperOver(slug, token, body);
+  }
+
+  @Post(':slug/abandon')
+  abandon(
+    @Param('slug') slug: string,
+    @Headers(EDIT_HEADER) token: string,
+    @Body(new ZodValidationPipe(cricketAbandonSchema))
+    body: CricketAbandonInput,
+  ) {
+    return this.cricket.abandonStandalone(slug, token, body);
   }
 }

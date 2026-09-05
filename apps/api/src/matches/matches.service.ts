@@ -41,7 +41,12 @@ export class MatchesService {
     private readonly rankings: RankingsService,
   ) {}
 
-  async setResult(matchId: string, userId: string, input: MatchResultInput) {
+  async setResult(
+    matchId: string,
+    userId: string | null,
+    input: MatchResultInput,
+    opts?: { teamId?: string },
+  ) {
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       include: {
@@ -51,7 +56,13 @@ export class MatchesService {
       },
     });
     if (!match) throw new NotFoundException('Match not found');
-    await this.assertCanReportResult(match, userId);
+    if (opts?.teamId) {
+      await this.assertTeamCanReport(match, opts.teamId);
+    } else if (userId) {
+      await this.assertCanReportResult(match, userId);
+    } else {
+      throw new ForbiddenException();
+    }
     if (!match.homeTeamId || !match.awayTeamId) {
       throw new BadRequestException('Match teams are not set yet');
     }
@@ -566,6 +577,23 @@ export class MatchesService {
         attachmentName: input.attachmentName ?? null,
       },
     });
+  }
+
+  private async assertTeamCanReport(
+    match: {
+      homeTeamId: string | null;
+      awayTeamId: string | null;
+      tournament: { settings: unknown };
+    },
+    teamId: string,
+  ) {
+    const settings = tournamentSettingsSchema.parse(match.tournament.settings ?? {});
+    if (!settings.allowParticipantsReportScores) {
+      throw new ForbiddenException('Participants cannot report scores in this tournament');
+    }
+    if (match.homeTeamId !== teamId && match.awayTeamId !== teamId) {
+      throw new ForbiddenException('This is not your match');
+    }
   }
 
   private async assertCanReportResult(

@@ -413,11 +413,15 @@ export class RegistrationsService {
       });
     }
     if (reg.email) {
-      await this.notifications.sendEmail(
-        reg.email,
-        title,
-        this.notifications.emailLayout(title, body, { label: 'View registration', url }),
-      );
+      const allowEmail =
+        !reg.userId || (await this.inbox.allowsEmail(reg.userId, 'emailRegistration'));
+      if (allowEmail) {
+        await this.notifications.sendEmail(
+          reg.email,
+          title,
+          this.notifications.emailLayout(title, body, { label: 'View registration', url }),
+        );
+      }
     }
   }
 

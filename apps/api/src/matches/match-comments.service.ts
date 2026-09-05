@@ -8,6 +8,7 @@ import { tournamentSettingsSchema } from '@bracket/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { InboxService } from '../inbox/inbox.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const COMMENT_INCLUDE = {
   user: {
@@ -21,6 +22,7 @@ export class MatchCommentsService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly inbox: InboxService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async loadMatch(matchId: string) {
@@ -83,12 +85,30 @@ export class MatchCommentsService {
     }
     if (recipients.size) {
       const label = `${match.homeTeam?.name ?? 'TBD'} vs ${match.awayTeam?.name ?? 'TBD'}`;
+      const title = `New comment on ${label}`;
+      const excerpt = `${comment.user.name}: ${body.trim().slice(0, 140)}`;
+      const href = `/t/${match.tournament.slug}/m/${match.id}`;
       await this.inbox.notifyMany([...recipients], {
         type: 'match_comment',
-        title: `New comment on ${label}`,
-        body: `${comment.user.name}: ${body.trim().slice(0, 140)}`,
-        href: `/t/${match.tournament.slug}/m/${match.id}`,
+        title,
+        body: excerpt,
+        href,
       });
+      const emailTo = await this.inbox.usersAllowingEmail(
+        [...recipients],
+        'emailMatchComments',
+      );
+      if (emailTo.length) {
+        const url = `${this.notifications.appUrl()}${href}`;
+        const html = this.notifications.emailLayout(
+          title,
+          `<p>${excerpt}</p><p>Tournament: <strong>${match.tournament.name}</strong></p>`,
+          { label: 'Open match', url },
+        );
+        for (const user of emailTo) {
+          await this.notifications.sendEmail(user.email, title, html);
+        }
+      }
     }
     return comment;
   }

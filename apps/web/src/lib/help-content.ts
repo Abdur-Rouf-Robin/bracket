@@ -47,7 +47,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   { id: 'sharing', title: 'Sharing & embed', description: 'Embeds, QR codes, TV mode, exports and privacy.' },
   { id: 'communities', title: 'Communities', description: 'Roles, followers, Elo rankings and templates.' },
   { id: 'events', title: 'Events', description: 'Multi-tournament events, tickets and check-in.' },
-  { id: 'account', title: 'Account & billing', description: 'Plans, Premier, invoices and account settings.' },
+  { id: 'account', title: 'Account & billing', description: 'Account settings and optional entry-fee payments.' },
   { id: 'troubleshooting', title: 'Troubleshooting', description: 'Fixing common problems and recovering data.' },
 ];
 
@@ -454,7 +454,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     slug: 'auto-scheduling',
     title: 'Auto-scheduling matches',
     category: 'scheduling',
-    summary: 'Generate match times across venues and referees in one click (Premier).',
+    summary: 'Generate match times across venues and referees in one click.',
     keywords: ['schedule', 'auto', 'time slots', 'rest', 'referee', 'venue'],
     sections: [
       {
@@ -625,7 +625,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     sections: [
       {
         heading: 'Embed code',
-        body: ['Copy the iframe from Settings → Sharing & embed or the Share menu. Choose the default tab (bracket, standings, schedule) and — on Premier — a light, dark or custom theme to match your site.'],
+        body: ['Copy the iframe from Settings → Sharing & embed or the Share menu. Choose the default tab (bracket, standings, schedule) and a light, dark or custom theme to match your site.'],
       },
       {
         heading: 'Sizing',
@@ -673,7 +673,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
         body: ['Open /t/your-slug/print for a clean, print-optimized bracket. Use landscape for large brackets. The bracket generator also offers Print and Download PNG for quick offline brackets.'],
       },
       {
-        heading: 'Exports (Premier)',
+        heading: 'Exports',
         body: ['From Settings → Tools export participants, registrations, schedule, results and standings as CSV, or a full tournament summary as PDF.'],
       },
     ],
@@ -807,22 +807,18 @@ export const HELP_ARTICLES: HelpArticle[] = [
   // ---------------------------------------------------------------- account
   {
     slug: 'plans-and-billing',
-    title: 'Plans, Premier and billing',
+    title: 'Plans and billing',
     category: 'account',
-    summary: 'What is included in Standard and Premier, and how billing works.',
-    keywords: ['premier', 'plan', 'billing', 'invoice', 'subscription', 'cancel'],
+    summary: 'The platform is free. Stripe is only for your own entry fees and tickets.',
+    keywords: ['premier', 'plan', 'billing', 'invoice', 'subscription', 'cancel', 'free'],
     sections: [
       {
-        heading: 'Standard vs Premier',
-        body: ['Standard is free forever: unlimited tournaments, communities and events with up to 256 participants each, ad-supported. Premier removes ads for you and your viewers, raises the limit to 512 participants, and unlocks custom embed themes and branding, 25 MB file attachments, the auto-scheduler with referees, CSV/PDF exports, one Pro community and priority support.'],
+        heading: 'Everything is free',
+        body: ['Every organizer feature is included: all formats, the full game catalog, auto-scheduler, referees, CSV/PDF, custom branding, embeds, TV mode, communities, events and the cricket scoreboard. There is no Premier paywall and no ads.'],
       },
       {
-        heading: 'Upgrading',
-        body: ['Go to Pricing, choose monthly or yearly and click Upgrade. Checkout is handled by Stripe. Premier activates immediately after payment.'],
-      },
-      {
-        heading: 'Managing and cancelling',
-        body: ['Settings → Billing shows your plan, renewal date and a Manage subscription button that opens the Stripe billing portal for invoices, card changes and cancellation. Cancelled plans stay active until the period ends.'],
+        heading: 'Entry fees and tickets',
+        body: ['If you charge participants, connect your own Stripe account. Payments go to you. Bracket does not sell a platform subscription.'],
       },
     ],
   },

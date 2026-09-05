@@ -14,6 +14,8 @@ module.exports = {
         NODE_ENV: "production",
         HOST: "127.0.0.1",
         API_PORT: "4200",
+        APP_URL: "https://bracket.arrobin.com",
+        EMAIL_FROM: "Bracket <noreply@arrobin.com>",
       },
     },
     {

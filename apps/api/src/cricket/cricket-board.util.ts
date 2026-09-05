@@ -1,4 +1,5 @@
 import {
+  aggregateTeamRuns,
   computeBattingPoints,
   computeBowlingPoints,
   computeLeaguePoints,
@@ -6,10 +7,13 @@ import {
   computeProjectedScore,
   computeRequiredRunRate,
   computeRunRate,
+  cricketFollowOnState,
+  dismissalCountsAsWicket,
   formatCricketOvers,
   lastCompletedOverBowlerId,
   isDuck,
   isGoldenDuck,
+  powerplayLegalBalls,
   type CricketBallEvent,
   type CricketBattingRow,
   type CricketBowlingRow,
@@ -73,6 +77,8 @@ type CricketRow = {
   maxOversPerBowler: number;
   maxBowlersAtLimit: number;
   inningsCount: number;
+  followOnEnforced?: boolean;
+  followOnMargin?: number | null;
   strikeRotationMode?: string;
   homeTeamName: string | null;
   awayTeamName: string | null;
@@ -107,6 +113,16 @@ export function formatDismissal(
       return fielder ? `run out (${fielder})` : 'run out';
     case 'STUMPED':
       return fielder ? `st ${fielder} b ${bowler}` : `st b ${bowler}`;
+    case 'HIT_WICKET':
+      return `hit wicket b ${bowler}`;
+    case 'RETIRED':
+      return 'retired out';
+    case 'RETIRED_HURT':
+      return 'retired hurt';
+    case 'OBSTRUCTING':
+      return 'obstructing the field';
+    case 'TIMED_OUT':
+      return 'timed out';
     default:
       return ball.wicketType?.replaceAll('_', ' ').toLowerCase() ?? 'out';
   }
@@ -174,7 +190,8 @@ export function buildInningsView(
     if (ball.runsOffBat === 4) bat.fours += 1;
     if (ball.runsOffBat === 6) bat.sixes += 1;
 
-    if (ball.isWicket && ball.dismissedPlayerId) {
+    if (ball.dismissedPlayerId && (ball.isWicket || ball.wicketType === 'RETIRED_HURT')) {
+      const counts = dismissalCountsAsWicket(ball.wicketType, ball.isWicket);
       const dismissed = battingStats.get(ball.dismissedPlayerId) ?? {
         runs: 0,
         balls: 0,
@@ -183,21 +200,23 @@ export function buildInningsView(
         isOut: false,
         dismissal: null,
       };
-      dismissed.isOut = true;
+      dismissed.isOut = counts;
       dismissed.dismissal = formatDismissal(ball, playerMap);
       battingStats.set(ball.dismissedPlayerId, dismissed);
 
-      wicketCount += 1;
-      fallOfWickets.push({
-        wicket: wicketCount,
-        score: runningScore,
-        over: formatCricketOvers(
-          inn.balls.filter((b) => b.sequence <= ball.sequence && b.isLegalDelivery).length,
-          ballsPerOver,
-        ),
-        batsmanName: playerMap.get(ball.dismissedPlayerId) ?? 'Unknown',
-        dismissal: dismissed.dismissal,
-      });
+      if (counts) {
+        wicketCount += 1;
+        fallOfWickets.push({
+          wicket: wicketCount,
+          score: runningScore,
+          over: formatCricketOvers(
+            inn.balls.filter((b) => b.sequence <= ball.sequence && b.isLegalDelivery).length,
+            ballsPerOver,
+          ),
+          batsmanName: playerMap.get(ball.dismissedPlayerId) ?? 'Unknown',
+          dismissal: dismissed.dismissal,
+        });
+      }
     }
     battingStats.set(ball.batsmanId, bat);
 
@@ -209,7 +228,7 @@ export function buildInningsView(
     };
     if (ball.isLegalDelivery) bowl.legalBalls += 1;
     bowl.runs += ball.totalRuns;
-    if (ball.isWicket) bowl.wickets += 1;
+    if (dismissalCountsAsWicket(ball.wicketType, ball.isWicket)) bowl.wickets += 1;
     bowl.overRuns.set(
       ball.overNumber,
       (bowl.overRuns.get(ball.overNumber) ?? 0) + ball.totalRuns,
@@ -302,7 +321,7 @@ export function buildInningsView(
     dlsParScore: inn.dlsParScore,
     runRate: computeRunRate(inn.runs, inn.legalBalls, ballsPerOver),
     requiredRunRate:
-      target != null
+      target != null && effectiveMax > 0
         ? computeRequiredRunRate(
             inn.runs,
             target,
@@ -312,7 +331,7 @@ export function buildInningsView(
           )
         : null,
     projectedScore:
-      inn.status === 'IN_PROGRESS'
+      inn.status === 'IN_PROGRESS' && effectiveMax > 0
         ? computeProjectedScore(inn.runs, inn.legalBalls, effectiveMax, ballsPerOver)
         : null,
     strikerId: inn.strikerId,
@@ -385,19 +404,37 @@ export function buildScoreboard(
   const regularInnings = inningsViews.filter((i) => !i.isSuperOver);
   const superInnings = inningsViews.filter((i) => i.isSuperOver);
 
-  const homeInn = regularInnings.find(
+  const homeRuns = aggregateTeamRuns(regularInnings, homeKey);
+  const awayRuns = aggregateTeamRuns(regularInnings, awayKey);
+  const homeWickets = regularInnings
+    .filter((i) => i.battingTeamId === homeKey)
+    .reduce((sum, i) => sum + i.wickets, 0);
+  const awayWickets = regularInnings
+    .filter((i) => i.battingTeamId === awayKey)
+    .reduce((sum, i) => sum + i.wickets, 0);
+  const homeBalls = regularInnings
+    .filter((i) => i.battingTeamId === homeKey)
+    .reduce((sum, i) => sum + i.legalBalls, 0);
+  const awayBalls = regularInnings
+    .filter((i) => i.battingTeamId === awayKey)
+    .reduce((sum, i) => sum + i.legalBalls, 0);
+  const homeCompleted = regularInnings.some(
     (i) => i.battingTeamId === homeKey && i.status === 'COMPLETED',
   );
-  const awayInn = regularInnings.find(
+  const awayCompleted = regularInnings.some(
     (i) => i.battingTeamId === awayKey && i.status === 'COMPLETED',
   );
-  const chasing = regularInnings.find((i) => i.inningsNumber === 2);
+  const chasing = regularInnings.find(
+    (i) => i.status === 'IN_PROGRESS' && i.targetRuns != null,
+  );
+  const homeName = teamMap.get(homeKey) ?? cricket.homeTeamName ?? 'Home';
+  const awayName = teamMap.get(awayKey) ?? cricket.awayTeamName ?? 'Away';
 
   let result: string | null = null;
   let homePoints = cricket.homePoints;
   let awayPoints = cricket.awayPoints;
 
-  if (homeInn && awayInn) {
+  if (homeCompleted && awayCompleted) {
     const homeSo = superInnings.find((i) => i.battingTeamId === homeKey && i.status === 'COMPLETED');
     const awaySo = superInnings.find((i) => i.battingTeamId === awayKey && i.status === 'COMPLETED');
 
@@ -405,34 +442,55 @@ export function buildScoreboard(
       if (homeSo.runs === awaySo.runs) {
         result = 'Super Over tied — decide by boundary count or bowl-out';
       } else if (homeSo.runs > awaySo.runs) {
-        result = `${homeInn.battingTeamName} won Super Over (${homeSo.runs} vs ${awaySo.runs})`;
+        result = `${homeName} won Super Over (${homeSo.runs} vs ${awaySo.runs})`;
         homePoints ??= computeLeaguePoints('win');
         awayPoints ??= computeLeaguePoints('loss');
       } else {
-        result = `${awayInn.battingTeamName} won Super Over (${awaySo.runs} vs ${homeSo.runs})`;
+        result = `${awayName} won Super Over (${awaySo.runs} vs ${homeSo.runs})`;
         homePoints ??= computeLeaguePoints('loss');
         awayPoints ??= computeLeaguePoints('win');
       }
-    } else if (homeInn.runs === awayInn.runs) {
-      result = superInnings.length ? 'Super Over in progress' : 'Match tied — Super Over required';
+    } else if (homeRuns === awayRuns) {
+      result = superInnings.length
+        ? 'Super Over in progress'
+        : cricket.inningsCount >= 4
+          ? 'Match drawn'
+          : 'Match tied — Super Over required';
       homePoints ??= computeLeaguePoints('tie');
       awayPoints ??= computeLeaguePoints('tie');
-    } else if (homeInn.runs > awayInn.runs) {
-      result = `${homeInn.battingTeamName} won by ${homeInn.runs - awayInn.runs} runs`;
+    } else if (homeRuns > awayRuns) {
+      result = `${homeName} won by ${homeRuns - awayRuns} runs`;
       homePoints ??= computeLeaguePoints('win');
       awayPoints ??= computeLeaguePoints('loss');
     } else {
-      result = `${awayInn.battingTeamName} won by ${awayInn.runs - homeInn.runs} runs`;
+      result = `${awayName} won by ${awayRuns - homeRuns} runs`;
       homePoints ??= computeLeaguePoints('loss');
       awayPoints ??= computeLeaguePoints('win');
     }
-  } else if (homeInn && chasing?.status === 'IN_PROGRESS' && chasing.targetRuns != null) {
+  } else if (chasing?.status === 'IN_PROGRESS' && chasing.targetRuns != null) {
     const need = chasing.targetRuns - chasing.runs;
     result = `${chasing.battingTeamName} need ${need} run${need === 1 ? '' : 's'} (RRR ${chasing.requiredRunRate ?? '—'})`;
   }
 
-  const homeOvers = homeInn ? homeInn.legalBalls / cricket.ballsPerOver : 0;
-  const awayOvers = awayInn ? awayInn.legalBalls / cricket.ballsPerOver : 0;
+  const homeOvers = homeBalls / cricket.ballsPerOver;
+  const awayOvers = awayBalls / cricket.ballsPerOver;
+  const ppBalls = powerplayLegalBalls(cricket.format);
+  const live = inningsViews.find((i) => i.status === 'IN_PROGRESS');
+  const powerplay =
+    ppBalls != null && live
+      ? {
+          active: live.legalBalls < ppBalls,
+          ballsUsed: Math.min(live.legalBalls, ppBalls),
+          ballsTotal: ppBalls,
+        }
+      : null;
+  const followOn = cricketFollowOnState({
+    format: cricket.format,
+    inningsCount: cricket.inningsCount,
+    followOnEnforced: cricket.followOnEnforced,
+    followOnMargin: cricket.followOnMargin,
+    innings: cricket.innings,
+  });
 
   return {
     id: cricket.id,
@@ -448,25 +506,29 @@ export function buildScoreboard(
     maxOversPerBowler: cricket.maxOversPerBowler,
     maxBowlersAtLimit: cricket.maxBowlersAtLimit,
     inningsCount: cricket.inningsCount,
+    followOnEnforced: cricket.followOnEnforced ?? false,
+    followOnMargin: cricket.followOnMargin ?? null,
+    followOn,
+    powerplay,
     strikeRotationMode: (cricket.strikeRotationMode ?? 'AUTO') as CricketScoreboard['strikeRotationMode'],
     superOverPending: cricket.superOverPending ?? false,
     homeTeamName: cricket.homeTeamName,
     awayTeamName: cricket.awayTeamName,
     innings: inningsViews,
     matchSummary: {
-      homeRuns: homeInn?.runs ?? null,
-      awayRuns: awayInn?.runs ?? null,
-      homeWickets: homeInn?.wickets ?? null,
-      awayWickets: awayInn?.wickets ?? null,
+      homeRuns: homeCompleted || homeRuns > 0 ? homeRuns : null,
+      awayRuns: awayCompleted || awayRuns > 0 ? awayRuns : null,
+      homeWickets: homeCompleted || homeWickets > 0 ? homeWickets : null,
+      awayWickets: awayCompleted || awayWickets > 0 ? awayWickets : null,
       homePoints,
       awayPoints,
       homeNetRunRate:
-        homeInn && awayInn
-          ? computeNetRunRate(homeInn.runs, homeOvers, awayInn.runs, awayOvers)
+        homeCompleted && awayCompleted
+          ? computeNetRunRate(homeRuns, homeOvers, awayRuns, awayOvers)
           : null,
       awayNetRunRate:
-        homeInn && awayInn
-          ? computeNetRunRate(awayInn.runs, awayOvers, homeInn.runs, homeOvers)
+        homeCompleted && awayCompleted
+          ? computeNetRunRate(awayRuns, awayOvers, homeRuns, homeOvers)
           : null,
       result,
     },
@@ -490,6 +552,10 @@ export function emptyScoreboard(
     maxOversPerBowler: cricket.maxOversPerBowler ?? 4,
     maxBowlersAtLimit: cricket.maxBowlersAtLimit ?? 5,
     inningsCount: cricket.inningsCount ?? 2,
+    followOnEnforced: false,
+    followOnMargin: null,
+    followOn: null,
+    powerplay: null,
     strikeRotationMode: 'AUTO',
     superOverPending: false,
     homeTeamName: cricket.homeTeamName ?? null,

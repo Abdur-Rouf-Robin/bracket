@@ -56,7 +56,7 @@ export function CommunityHeader({
   const location = [community.location, countryName(community.countryCode)]
     .filter(Boolean)
     .join(', ');
-  const canManage = communityRoleAtLeast(viewerRole, 'ADMIN');
+  const canManage = communityRoleAtLeast(viewerRole, 'COLLABORATOR');
   const canCreate = communityRoleAtLeast(viewerRole, 'AFFILIATE');
 
   return (

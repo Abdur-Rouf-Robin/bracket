@@ -8,6 +8,7 @@ import { BracketModule } from '../bracket/bracket.module';
 import { TournamentsModule } from '../tournaments/tournaments.module';
 import { RankingsModule } from '../rankings/rankings.module';
 import { InboxModule } from '../inbox/inbox.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { MatchCommentsController } from './match-comments.controller';
 import { MatchCommentsService } from './match-comments.service';
 
@@ -20,6 +21,7 @@ import { MatchCommentsService } from './match-comments.service';
     forwardRef(() => TournamentsModule),
     RankingsModule,
     InboxModule,
+    NotificationsModule,
   ],
   controllers: [MatchesController, MatchCommentsController],
   providers: [MatchesService, MatchCommentsService],

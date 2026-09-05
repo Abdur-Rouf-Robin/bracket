@@ -20,6 +20,7 @@ export const CricketWicketType = {
   STUMPED: 'STUMPED',
   HIT_WICKET: 'HIT_WICKET',
   RETIRED: 'RETIRED',
+  RETIRED_HURT: 'RETIRED_HURT',
   OBSTRUCTING: 'OBSTRUCTING',
   TIMED_OUT: 'TIMED_OUT',
   OTHER: 'OTHER',
@@ -63,6 +64,8 @@ export type CricketMatchMode =
 export const CricketFormat = {
   T20: 'T20',
   ODI: 'ODI',
+  TEST: 'TEST',
+  HUNDRED: 'HUNDRED',
   CUSTOM: 'CUSTOM',
 } as const;
 
@@ -76,23 +79,28 @@ export const CricketStrikeRotationMode = {
 export type CricketStrikeRotationMode =
   (typeof CricketStrikeRotationMode)[keyof typeof CricketStrikeRotationMode];
 
+export const cricketFormatEnum = z.enum(['T20', 'ODI', 'TEST', 'HUNDRED', 'CUSTOM']);
+
 export const cricketSetupSchema = z.object({
-  format: z.enum(['T20', 'ODI', 'CUSTOM']).default('T20'),
-  maxOvers: z.number().int().min(1).max(300).optional(),
+  format: cricketFormatEnum.default('T20'),
+  /** 0 = unlimited (Test / declaration cricket). */
+  maxOvers: z.number().int().min(0).max(300).optional(),
   maxWickets: z.number().int().min(1).max(29).optional(),
-  ballsPerOver: z.number().int().min(4).max(10).default(6),
-  inningsCount: z.number().int().min(1).max(2).default(2),
+  ballsPerOver: z.number().int().min(4).max(10).optional(),
+  inningsCount: z.number().int().min(1).max(4).optional(),
   strikeRotationMode: z.enum(['AUTO', 'MANUAL']).default('AUTO'),
   /** Max overs any single bowler may bowl in an innings. */
-  maxOversPerBowler: z.number().int().min(1).max(50).optional(),
+  maxOversPerBowler: z.number().int().min(1).max(999).optional(),
   /** How many bowlers may bowl that maximum (others capped at max − 1). */
   maxBowlersAtLimit: z.number().int().min(1).max(30).optional(),
+  /** ICC follow-on lead, typically 200 for a 5-day Test. */
+  followOnMargin: z.number().int().min(1).max(400).optional(),
 });
 
 export type CricketSetupInput = z.infer<typeof cricketSetupSchema>;
 
 export const cricketStartInningsSchema = z.object({
-  inningsNumber: z.number().int().min(1).max(2),
+  inningsNumber: z.number().int().min(1).max(4),
   battingTeamId: z.string().min(1),
   bowlingTeamId: z.string().min(1),
   strikerId: z.string().min(1),
@@ -118,6 +126,7 @@ export const cricketBallSchema = z.object({
       'STUMPED',
       'HIT_WICKET',
       'RETIRED',
+      'RETIRED_HURT',
       'OBSTRUCTING',
       'TIMED_OUT',
       'OTHER',
@@ -160,11 +169,12 @@ export const cricketCreateStandaloneSchema = z.object({
   awayTeamName: z.string().min(1).max(80),
   homePlayers: z.array(cricketRosterPlayerSchema).min(1).max(30),
   awayPlayers: z.array(cricketRosterPlayerSchema).min(1).max(30),
-  format: z.enum(['T20', 'ODI', 'CUSTOM']).default('T20'),
-  maxOvers: z.number().int().min(1).max(300).optional(),
+  format: cricketFormatEnum.default('T20'),
+  maxOvers: z.number().int().min(0).max(300).optional(),
   maxWickets: z.number().int().min(1).max(29).optional(),
-  ballsPerOver: z.number().int().min(4).max(10).default(6),
-  inningsCount: z.number().int().min(1).max(2).default(2),
+  ballsPerOver: z.number().int().min(4).max(10).optional(),
+  inningsCount: z.number().int().min(1).max(4).optional(),
+  followOnMargin: z.number().int().min(1).max(400).optional(),
   strikeRotationMode: z.enum(['AUTO', 'MANUAL']).default('AUTO'),
   maxOversPerBowler: z.number().int().min(1).max(50).optional(),
   maxBowlersAtLimit: z.number().int().min(1).max(30).optional(),
@@ -188,7 +198,7 @@ export const cricketStandaloneTossSchema = z.object({
 export type CricketStandaloneTossInput = z.infer<typeof cricketStandaloneTossSchema>;
 
 export const cricketStandaloneStartInningsSchema = z.object({
-  inningsNumber: z.number().int().min(1).max(2),
+  inningsNumber: z.number().int().min(1).max(4),
   battingSide: z.enum(['home', 'away']),
   strikerId: z.string().min(1),
   nonStrikerId: z.string().min(1),
@@ -218,14 +228,20 @@ export type CricketEndInningsInput = z.infer<typeof cricketEndInningsSchema>;
 
 export const cricketDlsSchema = z.object({
   revisedMaxOvers: z.number().int().min(1).max(300),
-  applyToInnings: z.number().int().min(1).max(2).optional(),
+  applyToInnings: z.number().int().min(1).max(4).optional(),
 });
 
 export type CricketDlsInput = z.infer<typeof cricketDlsSchema>;
 
 export const cricketDeclareSchema = z.object({
-  inningsNumber: z.number().int().min(1).max(2),
+  inningsNumber: z.number().int().min(1).max(4),
 });
+
+export const cricketFollowOnSchema = z.object({
+  enforce: z.boolean().default(true),
+});
+
+export type CricketFollowOnInput = z.infer<typeof cricketFollowOnSchema>;
 
 export type CricketDeclareInput = z.infer<typeof cricketDeclareSchema>;
 
@@ -278,14 +294,147 @@ export type BowlerLimitSettings = {
   ballsPerOver: number;
 };
 
+export const CRICKET_FORMAT_PRESETS: Record<
+  CricketFormat,
+  {
+    label: string;
+    maxOvers: number;
+    ballsPerOver: number;
+    inningsCount: number;
+    followOnMargin: number | null;
+  }
+> = {
+  T20: { label: 'T20', maxOvers: 20, ballsPerOver: 6, inningsCount: 2, followOnMargin: null },
+  ODI: { label: 'ODI', maxOvers: 50, ballsPerOver: 6, inningsCount: 2, followOnMargin: null },
+  TEST: { label: 'Test', maxOvers: 0, ballsPerOver: 6, inningsCount: 4, followOnMargin: 200 },
+  HUNDRED: { label: 'The Hundred', maxOvers: 20, ballsPerOver: 5, inningsCount: 2, followOnMargin: null },
+  CUSTOM: { label: 'Custom', maxOvers: 20, ballsPerOver: 6, inningsCount: 2, followOnMargin: null },
+};
+
+export function cricketFormatPreset(format?: string | null) {
+  const key = (format ?? 'T20') as CricketFormat;
+  return CRICKET_FORMAT_PRESETS[key] ?? CRICKET_FORMAT_PRESETS.T20;
+}
+
+/** Powerplay length in legal balls (ICC T20/ODI first powerplay; Hundred first 25). */
+export function powerplayLegalBalls(format?: string | null): number | null {
+  if (format === 'T20') return 36;
+  if (format === 'ODI') return 60;
+  if (format === 'HUNDRED') return 25;
+  return null;
+}
+
+export function dismissalCountsAsWicket(
+  wicketType?: string | null,
+  isWicket?: boolean,
+): boolean {
+  if (wicketType === 'RETIRED_HURT') return false;
+  return !!isWicket;
+}
+
+export type CricketFollowOnState = {
+  available: boolean;
+  enforced: boolean;
+  lead: number;
+  margin: number;
+  battingFirstTeamId: string;
+  followOnBattingTeamId: string;
+};
+
+export function cricketFollowOnState(input: {
+  format?: string | null;
+  inningsCount: number;
+  followOnEnforced?: boolean;
+  followOnMargin?: number | null;
+  innings: Array<{
+    inningsNumber: number;
+    battingTeamId: string;
+    runs: number;
+    status: string;
+    isSuperOver?: boolean;
+  }>;
+}): CricketFollowOnState | null {
+  const preset = cricketFormatPreset(input.format);
+  const margin = input.followOnMargin ?? preset.followOnMargin;
+  if (margin == null || input.inningsCount < 3) return null;
+  const regular = input.innings.filter((i) => !i.isSuperOver);
+  const first = regular.find((i) => i.inningsNumber === 1 && i.status === 'COMPLETED');
+  const second = regular.find((i) => i.inningsNumber === 2 && i.status === 'COMPLETED');
+  if (!first || !second) {
+    return {
+      available: false,
+      enforced: !!input.followOnEnforced,
+      lead: first && second ? first.runs - second.runs : 0,
+      margin,
+      battingFirstTeamId: first?.battingTeamId ?? '',
+      followOnBattingTeamId: second?.battingTeamId ?? '',
+    };
+  }
+  const thirdStarted = regular.some((i) => i.inningsNumber >= 3);
+  const lead = first.runs - second.runs;
+  return {
+    available: !thirdStarted && !input.followOnEnforced && lead >= margin,
+    enforced: !!input.followOnEnforced,
+    lead,
+    margin,
+    battingFirstTeamId: first.battingTeamId,
+    followOnBattingTeamId: second.battingTeamId,
+  };
+}
+
+export function cricketChaseTarget(input: {
+  inningsCount: number;
+  startingInningsNumber: number;
+  battingTeamId: string;
+  innings: Array<{
+    inningsNumber: number;
+    battingTeamId: string;
+    runs: number;
+    status: string;
+    isSuperOver?: boolean;
+  }>;
+}): number | null {
+  if (input.startingInningsNumber < input.inningsCount) return null;
+  const regular = input.innings.filter(
+    (i) => !i.isSuperOver && i.status === 'COMPLETED',
+  );
+  const ownPrev = regular
+    .filter((i) => i.battingTeamId === input.battingTeamId)
+    .reduce((sum, i) => sum + i.runs, 0);
+  const opp = regular
+    .filter((i) => i.battingTeamId !== input.battingTeamId)
+    .reduce((sum, i) => sum + i.runs, 0);
+  return opp - ownPrev + 1;
+}
+
+export function aggregateTeamRuns(
+  innings: Array<{ battingTeamId: string; runs: number; isSuperOver?: boolean; status?: string }>,
+  teamId: string,
+): number {
+  return innings
+    .filter(
+      (i) =>
+        i.battingTeamId === teamId &&
+        !i.isSuperOver &&
+        (i.status == null || i.status === 'COMPLETED' || i.status === 'IN_PROGRESS'),
+    )
+    .reduce((sum, i) => sum + i.runs, 0);
+}
+
 export function defaultBowlerLimits(
   maxOvers: number,
   format: CricketFormat,
 ): { maxOversPerBowler: number; maxBowlersAtLimit: number } {
+  if (format === 'TEST' || maxOvers <= 0) {
+    return { maxOversPerBowler: 999, maxBowlersAtLimit: 11 };
+  }
   if (format === 'ODI') {
     return { maxOversPerBowler: 10, maxBowlersAtLimit: 5 };
   }
-  const maxOversPerBowler = format === 'T20' ? 4 : Math.max(1, Math.ceil(maxOvers / 5));
+  if (format === 'HUNDRED' || format === 'T20') {
+    return { maxOversPerBowler: 4, maxBowlersAtLimit: 5 };
+  }
+  const maxOversPerBowler = Math.max(1, Math.ceil(maxOvers / 5));
   const maxBowlersAtLimit = Math.max(1, Math.ceil(maxOvers / maxOversPerBowler));
   return { maxOversPerBowler, maxBowlersAtLimit };
 }
@@ -535,6 +684,14 @@ export type CricketScoreboard = {
   maxOversPerBowler: number;
   maxBowlersAtLimit: number;
   inningsCount: number;
+  followOnEnforced: boolean;
+  followOnMargin: number | null;
+  followOn: CricketFollowOnState | null;
+  powerplay: {
+    active: boolean;
+    ballsUsed: number;
+    ballsTotal: number;
+  } | null;
   strikeRotationMode: CricketStrikeRotationMode;
   homeTeamName: string | null;
   awayTeamName: string | null;

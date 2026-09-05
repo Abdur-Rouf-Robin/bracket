@@ -27,7 +27,7 @@ import {
   Vote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PLANS, formatPlanPrice, planMonthlyEquivalentCents } from '@/lib/plans';
+import { PLANS } from '@/lib/plans';
 import { FORMAT_LINKS } from '@/components/site-header';
 import { SectionHeading } from './marketing-shell';
 import { Faq } from './faq';
@@ -76,7 +76,7 @@ const TESTIMONIALS = [
     role: 'League coordinator, community futsal',
   },
   {
-    quote: 'The station queue alone paid for Premier. Sixteen setups, 200 players, and nobody asked "where do I play next?" all day.',
+    quote: 'The station queue saved the day. Sixteen setups, 200 players, and nobody asked "where do I play next?" all day.',
     name: 'Devon K.',
     role: 'Tournament organizer, fighting games',
   },
@@ -91,11 +91,11 @@ const HOME_FAQ = [
   { q: 'How are byes handled?', a: 'When the number of participants is not a power of two, top seeds receive byes in the first round automatically. Byes are shown in the bracket and advance the seeded participant without a match.' },
   { q: 'Can I add a third-place match?', a: 'Yes. Enable "third place / placement matches" in tournament settings for single or double elimination, and the bracket adds a consolation final between the semi-final losers. You can also run placement ladders for 5th–8th and beyond.' },
   { q: 'Do viewers need an account?', a: 'No. Public tournament pages, brackets, schedules and standings are viewable by anyone with the link — no login required. Only organizers and participants who register need accounts.' },
-  { q: 'Can I embed a bracket on my website?', a: 'Every public tournament has an embed URL you can drop into an iframe. Premier organizers can pick custom embed themes to match their site.' },
+  { q: 'Can I embed a bracket on my website?', a: 'Every public tournament has an embed URL you can drop into an iframe. Pick light, dark or a custom theme to match your site.' },
   { q: 'Does it work on mobile?', a: 'Yes. Everything — including score entry, check-in and the station queue — is designed mobile-first so you can run the whole event from your phone.' },
   { q: 'Can participants be teams with rosters?', a: 'Yes. Participants can be individuals or teams with players, captains and substitutes. Player-level stats and MVP awards are available for team sports.' },
   { q: 'Can I keep a tournament private?', a: 'You can hide a tournament from browse and search engines, restrict it to a password, or keep it fully private to organizers until you are ready to publish.' },
-  { q: 'What does it cost?', a: `Standard is free with unlimited tournaments, communities and events (ad-supported, up to ${PLANS.FREE.limits.maxParticipants} participants). Premier removes ads, raises limits to ${PLANS.PREMIER.limits.maxParticipants} participants, and unlocks the auto-scheduler, exports and custom branding.` },
+  { q: 'What does it cost?', a: `Nothing. Every format, game catalog, scheduler, export, embed theme and cricket scoreboard is free forever — up to ${PLANS.FREE.limits.maxParticipants} participants per tournament, unlimited events.` },
 ];
 
 export function TrustBand() {
@@ -275,36 +275,21 @@ export function Testimonials() {
 }
 
 export function PricingTeaser() {
-  const premierMonthly = formatPlanPrice(planMonthlyEquivalentCents(PLANS.PREMIER, 'year'));
   return (
     <section className="container-page py-20">
-      <SectionHeading eyebrow="Pricing" title="Free to start. Premier when you grow." />
-      <div className="mx-auto mt-12 grid max-w-4xl gap-4 md:grid-cols-2">
+      <SectionHeading eyebrow="Pricing" title="Everything is free. Forever." />
+      <div className="mx-auto mt-12 max-w-xl">
         <div className="card p-6">
           <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-muted)]">{PLANS.FREE.name}</p>
           <p className="font-display mt-2 text-4xl font-bold">$0</p>
           <p className="mt-1 text-sm text-[var(--color-muted)]">{PLANS.FREE.tagline}</p>
           <ul className="mt-5 space-y-2 text-sm">
-            {PLANS.FREE.features.slice(0, 5).map((f) => (
+            {PLANS.FREE.features.slice(0, 6).map((f) => (
               <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-[var(--color-ok)]" aria-hidden />{f}</li>
             ))}
           </ul>
-          <Button variant="secondary" className="mt-6 w-full" asChild>
+          <Button variant="primary" className="mt-6 w-full" asChild>
             <Link href="/register">Get started free</Link>
-          </Button>
-        </div>
-        <div className="card relative overflow-hidden border-[var(--color-premier)]/40 p-6">
-          <span className="badge badge-premier absolute right-4 top-4">Most popular</span>
-          <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-premier)]">{PLANS.PREMIER.name}</p>
-          <p className="font-display mt-2 text-4xl font-bold">{premierMonthly}<span className="text-base font-semibold text-[var(--color-muted)]">/mo</span></p>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">billed yearly, or {formatPlanPrice(PLANS.PREMIER.priceMonthlyCents)} monthly</p>
-          <ul className="mt-5 space-y-2 text-sm">
-            {PLANS.PREMIER.features.slice(0, 5).map((f) => (
-              <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-[var(--color-ok)]" aria-hidden />{f}</li>
-            ))}
-          </ul>
-          <Button variant="premier" className="mt-6 w-full" asChild>
-            <Link href="/pricing">See Premier</Link>
           </Button>
         </div>
       </div>

@@ -15,7 +15,6 @@ import { ImageUrlField } from '@/components/image-url-field';
 import { Markdown } from './markdown';
 import { contrastText } from './brand-style';
 import {
-  PremierBadge,
   Section,
   Toggle,
   settingsOf,
@@ -268,25 +267,14 @@ function SlugSection({ tournament, token }: { tournament: Tournament; token?: st
 function BrandingToggleSection({ tournament, token }: { tournament: Tournament; token?: string }) {
   const s = settingsOf(tournament);
   const save = useSaveSettings(tournament, token);
-  const premier = tournament.viewerPlan === 'PREMIER';
   return (
     <Section title="Powered-by branding">
       <Toggle
         checked={!!s.hideBranding}
         onChange={(v) => save.mutate({ hideBranding: v })}
         label="Hide “Powered by Bracket”"
-        badge={<PremierBadge />}
-        description={
-          premier
-            ? 'Removes Bracket branding from your public page, embeds, TV display and PDF footers.'
-            : 'Saved for when you upgrade — branding stays visible on the Free plan.'
-        }
+        description="Removes Bracket branding from your public page, embeds, TV display and PDF footers."
       />
-      {!premier && s.hideBranding && (
-        <p className="text-[11px] text-amber-700">
-          This setting is stored but not applied until your account is on Premier.
-        </p>
-      )}
     </Section>
   );
 }

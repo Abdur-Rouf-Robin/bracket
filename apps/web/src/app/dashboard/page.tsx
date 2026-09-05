@@ -17,7 +17,6 @@ import {
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PremierUpsell } from '@/components/dashboard/premier-upsell';
 import {
   ActivityPanel,
   CommunitiesPanel,
@@ -26,10 +25,10 @@ import {
 } from '@/components/dashboard/side-panels';
 import { TournamentList, bucketOf } from '@/components/dashboard/tournament-list';
 import { VerifyEmailBanner } from '@/components/dashboard/verify-email-banner';
+import type { PlayerHubItem } from '@bracket/shared';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/ui/stat-card';
@@ -59,6 +58,7 @@ const QUICK_ACTIONS = [
   { href: '/communities/new', label: 'New community', icon: Users2 },
   { href: '/events/new', label: 'New event', icon: CalendarPlus },
   { href: '/bracket-generator', label: 'Quick bracket', icon: Wand2 },
+  { href: '/play', label: 'My matches', icon: Radio },
 ];
 
 export default function DashboardPage() {
@@ -75,6 +75,12 @@ export default function DashboardPage() {
     queryKey: ['my-tournaments'],
     enabled: !!token,
     queryFn: () => api<Tournament[]>('/tournaments/mine', { token }),
+  });
+
+  const playHub = useQuery({
+    queryKey: ['play-hub'],
+    enabled: !!token,
+    queryFn: () => api<PlayerHubItem[]>('/account/play', { token }),
   });
 
   const communities = useQuery({
@@ -136,7 +142,6 @@ export default function DashboardPage() {
     );
   }
 
-  const isPremier = user.plan === 'PREMIER';
   const firstName = user.name?.split(' ')[0] || user.name;
 
   return (
@@ -144,6 +149,27 @@ export default function DashboardPage() {
       <SiteHeader />
       <main className="container-page flex-1 space-y-8 py-8 md:py-10">
         <VerifyEmailBanner />
+
+        {playHub.data && playHub.data.length > 0 && (
+          <Link
+            href="/play"
+            className="gaming-card flex items-center justify-between gap-3 rounded-2xl p-4 transition hover:border-[var(--color-accent)]/40"
+          >
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-accent)]">
+                Playing now
+              </p>
+              <p className="mt-1 font-medium">
+                {playHub.data[0].nextMatch
+                  ? `Next: ${playHub.data[0].team.name} vs ${playHub.data[0].nextMatch.opponent?.name ?? 'TBD'}`
+                  : `${playHub.data.length} active tournament${playHub.data.length === 1 ? '' : 's'}`}
+              </p>
+            </div>
+            <Button size="sm" variant="secondary">
+              What do I do now
+            </Button>
+          </Link>
+        )}
 
         <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-4">
@@ -153,11 +179,6 @@ export default function DashboardPage() {
                 <h1 className="font-display text-2xl font-bold tracking-tight md:text-3xl">
                   {greeting()}, {firstName}
                 </h1>
-                {isPremier ? (
-                  <Badge variant="premier">Premier</Badge>
-                ) : (
-                  <Badge variant="neutral">Standard</Badge>
-                )}
               </div>
               <p className="mt-1 text-sm text-[var(--color-muted)]">
                 {stats.live > 0
@@ -228,14 +249,13 @@ export default function DashboardPage() {
           </div>
 
           <aside className="space-y-4">
-            {!isPremier && <PremierUpsell />}
             <ActivityPanel token={token} />
             <CommunitiesPanel token={token} />
             <EventsPanel token={token} />
             <TemplatesPanel token={token} />
             <div className="card p-4 text-xs text-[var(--color-muted)]">
               <p className="font-semibold text-[var(--color-ink)]">Need a hand?</p>
-              <p className="mt-1">Read the guides or reach out — Premier gets priority replies.</p>
+              <p className="mt-1">Read the guides or reach out — every organizer feature is free.</p>
               <div className="mt-2 flex gap-2">
                 <Button size="sm" variant="ghost" asChild><Link href="/help">Help center</Link></Button>
                 <Button size="sm" variant="ghost" asChild><Link href="/contact">Contact</Link></Button>

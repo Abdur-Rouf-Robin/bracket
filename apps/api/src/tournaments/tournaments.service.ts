@@ -54,6 +54,8 @@ import { BracketRepairService } from '../bracket/bracket-repair.service';
 import { AccessService } from '../common/access.service';
 import { canUseBracketPredictions, validatePredictionCustomFields } from './bracket-prediction-policy';
 import { verifyViewToken } from '../exports/view-token.util';
+import { NotificationsService } from '../notifications/notifications.service';
+import { WebhooksService } from '../developer/webhooks.service';
 
 @Injectable()
 export class TournamentsService {
@@ -64,6 +66,8 @@ export class TournamentsService {
     private readonly bracketRepair: BracketRepairService,
     private readonly access: AccessService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
+    private readonly webhooks: WebhooksService,
   ) {}
 
   async create(userId: string, input: CreateTournamentInput) {
@@ -148,14 +152,10 @@ export class TournamentsService {
       );
     }
 
-    const plan = await this.access.userPlan(userId);
-    const max =
-      plan === 'PREMIER'
-        ? Number(this.config.get('PREMIER_MAX_PARTICIPANTS') ?? 512)
-        : Number(this.config.get('FREE_MAX_PARTICIPANTS') ?? 256);
+    const max = Number(this.config.get('MAX_PARTICIPANTS') ?? 4096);
     if (input.teams.length > max) {
       throw new BadRequestException(
-        `Your ${plan === 'PREMIER' ? 'Premier' : 'Standard'} plan allows up to ${max} participants. Upgrade to add more.`,
+        `A tournament can have at most ${max} participants.`,
       );
     }
 
@@ -677,6 +677,7 @@ export class TournamentsService {
       data: {
         format: format as TournamentFormat,
         status: TournamentStatus.ACTIVE,
+        startedAt: t.startedAt ?? new Date(),
         advancePerGroup,
         swissRounds,
         raceCount,
@@ -684,6 +685,7 @@ export class TournamentsService {
         settings,
       },
     });
+    void this.webhooks.dispatchEvent('tournament.started', id, { source: 'generate' });
 
     if (plannedEvents.length) {
       for (const ev of plannedEvents) {
@@ -733,6 +735,9 @@ export class TournamentsService {
       await this.requireOwner(id, userId);
     }
     const existing = await this.prisma.tournament.findUnique({ where: { id } });
+    const becomingComplete =
+      input.status === TournamentStatus.COMPLETED &&
+      existing?.status !== TournamentStatus.COMPLETED;
     const mergedSettings = tournamentSettingsSchema.parse({
       ...((existing?.settings as object) ?? {}),
       ...(input.settings ?? {}),
@@ -752,7 +757,7 @@ export class TournamentsService {
       slug = candidate;
     }
 
-    return this.prisma.tournament.update({
+    const result = await this.prisma.tournament.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
@@ -783,6 +788,7 @@ export class TournamentsService {
           : {}),
         ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(becomingComplete ? { completedAt: new Date() } : {}),
         settings: mergedSettings,
         advancePerGroup: mergedSettings.advancePerGroup,
         swissRounds: mergedSettings.swissRounds,
@@ -790,6 +796,44 @@ export class TournamentsService {
         eventCount: mergedSettings.eventCount,
       },
       include: this.fullInclude(),
+    });
+
+    if (becomingComplete) {
+      await this.afterCompleted(id);
+    }
+    return result;
+  }
+
+  /** Shared complete side effects: webhooks + result emails. */
+  async applyCompletedStatus(id: string) {
+    const existing = await this.prisma.tournament.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Tournament not found');
+    if (existing.status === TournamentStatus.COMPLETED && existing.completedAt) {
+      return existing;
+    }
+    const updated = await this.prisma.tournament.update({
+      where: { id },
+      data: {
+        status: TournamentStatus.COMPLETED,
+        completedAt: existing.completedAt ?? new Date(),
+      },
+    });
+    await this.afterCompleted(id);
+    return updated;
+  }
+
+  async complete(id: string, userId: string) {
+    await this.requireOwner(id, userId);
+    await this.applyCompletedStatus(id);
+    this.realtime.emitBracketUpdated(id);
+    return this.getOwned(id, userId);
+  }
+
+  private async afterCompleted(id: string) {
+    this.realtime.emitBracketUpdated(id);
+    void this.notifications.dispatch({
+      type: 'final_results',
+      tournamentId: id,
     });
   }
 

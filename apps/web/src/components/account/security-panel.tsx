@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export function SecurityPanel() {
-  const { token, logout } = useAuth();
+  const { token, logout, user, refreshUser } = useAuth();
   const router = useRouter();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -27,11 +27,12 @@ export function SecurityPanel() {
         token,
         body: JSON.stringify({ currentPassword: current, newPassword: next }),
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Password updated');
       setCurrent('');
       setNext('');
       setConfirm('');
+      await refreshUser();
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -69,6 +70,12 @@ export function SecurityPanel() {
         }}
       >
         <h2 className="font-display text-lg font-semibold">Change password</h2>
+        {user?.mustChangePassword && (
+          <p className="flex items-start gap-2 text-sm text-[var(--color-danger)]">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            You are still on the public demo password. Choose a new one (8+ characters).
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <Label htmlFor="current">Current password</Label>

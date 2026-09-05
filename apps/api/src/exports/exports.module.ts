@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { MatchesModule } from '../matches/matches.module';
 import { ExportsController } from './exports.controller';
 import { QrController } from './qr.controller';
 import { ParticipantAccessController } from './participant-access.controller';
@@ -19,7 +20,7 @@ import { TokenOrQueryAuthGuard } from './token-or-query-auth.guard';
  * participant access pages, discovery/search, spectator password gate.
  */
 @Module({
-  imports: [AuthModule, RealtimeModule],
+  imports: [AuthModule, RealtimeModule, MatchesModule],
   // Order matters: ParticipantAccessController's
   // `tournaments/:id/export/participant-qr.pdf` must register before the
   // generic `tournaments/:id/export/:file` route.
@@ -39,6 +40,6 @@ import { TokenOrQueryAuthGuard } from './token-or-query-auth.guard';
     ViewPasswordService,
     TokenOrQueryAuthGuard,
   ],
-  exports: [PublicAccessService, TokenOrQueryAuthGuard, DiscoveryService],
+  exports: [PublicAccessService, TokenOrQueryAuthGuard, DiscoveryService, ParticipantAccessService],
 })
 export class ExportsModule {}

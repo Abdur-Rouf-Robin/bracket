@@ -17,8 +17,7 @@ export type FeatureValue = boolean | string;
 export type FeatureRow = {
   label: string;
   hint?: string;
-  standard: FeatureValue;
-  premier: FeatureValue;
+  included: FeatureValue;
 };
 
 export type FeatureSection = {
@@ -32,16 +31,15 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
     id: 'formats',
     title: 'Formats',
     rows: [
-      { label: 'Single & double elimination', standard: true, premier: true },
-      { label: 'Round robin & Swiss', standard: true, premier: true },
-      { label: 'Groups → knockout (two-stage)', standard: true, premier: true },
-      { label: 'Free-for-all, leaderboard & racing', standard: true, premier: true },
-      { label: 'Third-place & placement matches', standard: true, premier: true },
-      { label: 'Best-of series & bracket reset', standard: true, premier: true },
+      { label: 'Single & double elimination', included: true },
+      { label: 'Round robin & Swiss', included: true },
+      { label: 'Groups → knockout (two-stage)', included: true },
+      { label: 'Free-for-all, leaderboard & racing', included: true },
+      { label: 'Third-place & placement matches', included: true },
+      { label: 'Best-of series & bracket reset', included: true },
       {
         label: 'Participants per tournament',
-        standard: `${PLANS.FREE.limits.maxParticipants}`,
-        premier: `${PLANS.PREMIER.limits.maxParticipants}`,
+        included: `${PLANS.FREE.limits.maxParticipants}`,
       },
     ],
   },
@@ -49,87 +47,80 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
     id: 'tournament-page',
     title: 'Tournament page',
     rows: [
-      { label: 'Live bracket, matches & standings', standard: true, premier: true },
-      { label: 'Announcements & rules', standard: true, premier: true },
-      { label: 'Player stats & MVP leaderboard', standard: true, premier: true },
-      { label: 'Predictions & match voting', standard: true, premier: true },
-      { label: 'Ad-free for you and your viewers', standard: false, premier: true },
-      { label: 'Custom branding colours & logo', standard: 'Logo only', premier: true },
-      { label: 'Hide "Powered by" footer', standard: false, premier: true },
+      { label: 'Live bracket, matches & standings', included: true },
+      { label: 'Announcements & rules', included: true },
+      { label: 'Player stats & MVP leaderboard', included: true },
+      { label: 'Predictions & match voting', included: true },
+      { label: 'Ad-free for you and your viewers', included: true },
+      { label: 'Custom branding colours & logo', included: true },
+      { label: 'Hide "Powered by" footer', included: true },
     ],
   },
   {
     id: 'participants',
     title: 'Participants & registration',
     rows: [
-      { label: 'Public sign-up pages', standard: true, premier: true },
-      { label: 'Check-in & roster lock', standard: true, premier: true },
-      { label: 'Waitlists & approvals', standard: true, premier: true },
-      { label: 'Custom registration fields', standard: true, premier: true },
-      { label: 'Paid registration (Stripe)', standard: 'Platform fee', premier: 'Platform fee' },
-      { label: 'Match attachments', standard: 'Links', premier: `Files up to ${PLANS.PREMIER.limits.fileAttachmentsMb} MB` },
+      { label: 'Public sign-up pages', included: true },
+      { label: 'Check-in & roster lock', included: true },
+      { label: 'Waitlists & approvals', included: true },
+      { label: 'Custom registration fields', included: true },
+      { label: 'Paid registration (Stripe, optional)', included: 'Organizer keeps the fee' },
+      { label: 'Match attachments', included: `Files up to ${PLANS.FREE.limits.fileAttachmentsMb} MB` },
     ],
   },
   {
     id: 'scheduling',
     title: 'Scheduling',
     rows: [
-      { label: 'Manual match times & stations', standard: true, premier: true },
-      { label: 'Station queue & TV display', standard: true, premier: true },
-      { label: 'Auto-scheduler with venues & referees', standard: false, premier: true },
-      { label: 'Referee assignments & availability', standard: false, premier: true },
+      { label: 'Manual match times & stations', included: true },
+      { label: 'Station queue & TV display', included: true },
+      { label: 'Auto-scheduler with venues & referees', included: true },
+      { label: 'Referee assignments & availability', included: true },
     ],
   },
   {
     id: 'sharing',
     title: 'Sharing & embed',
     rows: [
-      { label: 'Share links, QR codes & social cards', standard: true, premier: true },
-      { label: 'Embeddable bracket & standings', standard: true, premier: true },
-      { label: 'Custom embed themes', standard: false, premier: true },
-      { label: 'Private / password-protected pages', standard: true, premier: true },
-      { label: 'Printable brackets', standard: true, premier: true },
-      { label: 'CSV & PDF exports', standard: false, premier: true },
+      { label: 'Share links, QR codes & social cards', included: true },
+      { label: 'Embeddable bracket & standings', included: true },
+      { label: 'Custom embed themes', included: true },
+      { label: 'Private / password-protected pages', included: true },
+      { label: 'Printable brackets', included: true },
+      { label: 'CSV & PDF exports', included: true },
     ],
   },
   {
     id: 'communities',
     title: 'Communities & events',
     rows: [
-      { label: 'Communities with roles & followers', standard: true, premier: true },
-      { label: 'Events with multiple tournaments', standard: true, premier: true },
-      { label: 'Tickets & orders', standard: true, premier: true },
-      { label: 'Pro community with Elo rankings', standard: false, premier: `${PLANS.PREMIER.limits.proCommunities} included` },
-      { label: 'Tournament templates', standard: true, premier: true },
+      { label: 'Communities with roles & followers', included: true },
+      { label: 'Events with multiple tournaments', included: true },
+      { label: 'Tickets & orders', included: true },
+      { label: 'Elo rankings', included: true },
+      { label: 'Tournament templates', included: true },
     ],
   },
   {
     id: 'integrations',
     title: 'Integrations',
     rows: [
-      { label: 'REST API & API keys', standard: true, premier: true },
-      { label: 'Webhooks', standard: true, premier: true },
-      { label: 'Live updates over WebSockets', standard: true, premier: true },
+      { label: 'REST API & API keys', included: true },
+      { label: 'Webhooks', included: true },
+      { label: 'Live updates over WebSockets', included: true },
     ],
   },
   {
     id: 'support',
     title: 'Support',
     rows: [
-      { label: 'Help center & community support', standard: true, premier: true },
-      { label: 'Priority email support', standard: false, premier: true },
+      { label: 'Help center & community support', included: true },
     ],
   },
 ];
 
-export const ANNUAL_SAVINGS_PERCENT = Math.round(
-  (1 -
-    PLANS.PREMIER.priceYearlyCents /
-      (PLANS.PREMIER.priceMonthlyCents * 12)) *
-    100,
-);
+export const ANNUAL_SAVINGS_PERCENT = 0;
 
-export function premierPriceLabel(interval: BillingInterval): string {
-  const monthly = planMonthlyEquivalentCents(PLANS.PREMIER, interval);
-  return `${formatPlanPrice(monthly)}/mo`;
+export function premierPriceLabel(_interval: BillingInterval): string {
+  return '$0';
 }

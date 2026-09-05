@@ -1,24 +1,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { SUPPORTED_GAME_SEED_NAMES } from '@bracket/shared';
+import { GAME_RULES, SUPPORTED_GAME_SEED_NAMES } from '@bracket/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
-const SEED_GAMES = [
-  { name: 'PUBG', category: 'Esports', sortOrder: 1 },
-  { name: 'PUBG Mobile', category: 'Esports', sortOrder: 2 },
-  { name: 'Free Fire', category: 'Esports', sortOrder: 3 },
-  { name: 'Valorant', category: 'Esports', sortOrder: 4 },
-  { name: 'Call of Duty Mobile', category: 'Esports', sortOrder: 5 },
-  { name: 'Counter-Strike 2', category: 'Esports', sortOrder: 6 },
-  { name: 'Dota 2', category: 'Esports', sortOrder: 7 },
-  { name: 'Mobile Legends', category: 'Esports', sortOrder: 8 },
-  { name: 'League of Legends', category: 'Esports', sortOrder: 9 },
-  { name: 'EA FC 26 / FIFA', category: 'Esports', sortOrder: 10 },
-  { name: 'eFootball', category: 'Esports', sortOrder: 11 },
-  { name: 'Clash of Clans', category: 'Esports', sortOrder: 12 },
-  { name: 'Football / Soccer', category: 'Outdoor', sortOrder: 20 },
-  { name: 'Cricket', category: 'Outdoor', sortOrder: 21 },
-  { name: 'Badminton', category: 'Outdoor', sortOrder: 22 },
-];
+const SEED_GAMES = GAME_RULES.map((g, i) => ({
+  name: g.seedName,
+  category: g.category,
+  sortOrder: i + 1,
+}));
 
 @Injectable()
 export class GamesService implements OnModuleInit {

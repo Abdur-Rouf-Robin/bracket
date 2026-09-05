@@ -1,4 +1,5 @@
-// Contracts for the billing feature area. Owned by its workstream.
+// Contracts for the billing feature area. Plans stay in the schema for
+// compatibility; every organizer gets the full feature set at no charge.
 import { z } from 'zod';
 
 export const PlanId = {
@@ -37,66 +38,52 @@ export type PlanDefinition = {
   limits: PlanLimits;
 };
 
-export const FREE_MAX_PARTICIPANTS_DEFAULT = 256;
-export const PREMIER_MAX_PARTICIPANTS_DEFAULT = 512;
+export const FREE_MAX_PARTICIPANTS_DEFAULT = 4096;
+export const PREMIER_MAX_PARTICIPANTS_DEFAULT = 4096;
+
+const UNLOCKED_LIMITS: PlanLimits = {
+  maxParticipants: FREE_MAX_PARTICIPANTS_DEFAULT,
+  fileAttachmentsMb: 25,
+  customEmbedThemes: true,
+  adsFree: true,
+  autoScheduler: true,
+  prioritySupport: true,
+  proCommunities: 999,
+  csvPdfExport: true,
+};
+
+const UNLOCKED_FEATURES = [
+  'Unlimited tournaments, communities and events',
+  `Up to ${FREE_MAX_PARTICIPANTS_DEFAULT} participants per tournament`,
+  'All formats: round robin, Swiss, single/double elim, groups, leaderboard, racing',
+  'Mobile, PC, console and sports catalogs',
+  'Live cricket scoreboard with international playing conditions',
+  'Auto-scheduler, referees, CSV/PDF, embeds, TV mode and custom branding',
+  'No ads. No paywalls. Free forever.',
+];
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
   FREE: {
     id: 'FREE',
-    name: 'Standard',
-    tagline: 'Everything you need to run a tournament. Free forever.',
+    name: 'Free',
+    tagline: 'Every organizer feature, free forever.',
     priceMonthlyCents: 0,
     priceYearlyCents: 0,
-    features: [
-      'Unlimited tournaments, communities and events',
-      `Up to ${FREE_MAX_PARTICIPANTS_DEFAULT} participants per tournament`,
-      'All bracket formats and live results',
-      'Public pages, embeds, QR codes and TV mode',
-      'Sign-up pages, check-in and waitlists',
-      'Attachments as links',
-      'Ad-supported',
-    ],
-    limits: {
-      maxParticipants: FREE_MAX_PARTICIPANTS_DEFAULT,
-      fileAttachmentsMb: 0,
-      customEmbedThemes: false,
-      adsFree: false,
-      autoScheduler: false,
-      prioritySupport: false,
-      proCommunities: 0,
-      csvPdfExport: false,
-    },
+    features: UNLOCKED_FEATURES,
+    limits: UNLOCKED_LIMITS,
   },
   PREMIER: {
     id: 'PREMIER',
-    name: 'Premier',
-    tagline: 'For organizers who run serious events.',
-    priceMonthlyCents: 1200,
-    priceYearlyCents: 8388, // $6.99 × 12
-    features: [
-      'No ads for you and your viewers',
-      `Up to ${PREMIER_MAX_PARTICIPANTS_DEFAULT} participants per tournament`,
-      'Custom embed themes and branding',
-      'File attachments up to 25 MB',
-      'Auto-scheduler with venues and referees',
-      'CSV and PDF exports',
-      '1 Pro community with Elo rankings',
-      'Priority support',
-    ],
-    limits: {
-      maxParticipants: PREMIER_MAX_PARTICIPANTS_DEFAULT,
-      fileAttachmentsMb: 25,
-      customEmbedThemes: true,
-      adsFree: true,
-      autoScheduler: true,
-      prioritySupport: true,
-      proCommunities: 1,
-      csvPdfExport: true,
-    },
+    name: 'Free',
+    tagline: 'Every organizer feature, free forever.',
+    priceMonthlyCents: 0,
+    priceYearlyCents: 0,
+    features: UNLOCKED_FEATURES,
+    limits: UNLOCKED_LIMITS,
   },
 };
 
-export const PLAN_LIST: PlanDefinition[] = [PLANS.FREE, PLANS.PREMIER];
+export const PLAN_LIST: PlanDefinition[] = [PLANS.FREE];
 
 /** Effective monthly price in cents for a given interval. */
 export function planMonthlyEquivalentCents(

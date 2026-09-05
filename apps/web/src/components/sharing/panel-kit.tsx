@@ -174,14 +174,6 @@ export function Toggle({
   );
 }
 
-export function PremierBadge() {
-  return (
-    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
-      Premier
-    </span>
-  );
-}
-
 /** Build a download href that carries the JWT as `?access_token=` for manager exports. */
 export function managerDownloadHref(path: string, token?: string) {
   const sep = path.includes('?') ? '&' : '?';

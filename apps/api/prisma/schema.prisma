@@ -58,6 +58,7 @@ enum CricketWicketType {
   STUMPED
   HIT_WICKET
   RETIRED
+  RETIRED_HURT
   OBSTRUCTING
   TIMED_OUT
   OTHER
@@ -72,6 +73,8 @@ enum CricketInningsStatus {
 enum CricketFormat {
   T20
   ODI
+  TEST
+  HUNDRED
   CUSTOM
 }
 
@@ -181,6 +184,7 @@ model User {
   apiKeys       ApiKey[]
   webhooks      Webhook[]
   notifications Notification[]
+  notificationPreference NotificationPreference?
   rankingEntries RankingEntry[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
@@ -243,6 +247,17 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([userId, createdAt])
+}
+
+model NotificationPreference {
+  userId              String   @id
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inApp               Boolean  @default(true)
+  emailRegistration   Boolean  @default(true)
+  emailMatchComments  Boolean  @default(false)
+  emailMatchReady     Boolean  @default(true)
+  emailFinalResults   Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
 }
 
 model ApiKey {
@@ -1025,6 +1040,8 @@ model CricketMatch {
   maxOversPerBowler Int          @default(4)
   maxBowlersAtLimit Int          @default(5)
   inningsCount  Int              @default(2)
+  followOnEnforced Boolean       @default(false)
+  followOnMargin   Int?
   strikeRotationMode String      @default("AUTO")
   superOverPending   Boolean     @default(false)
   tossWinnerSide     String?

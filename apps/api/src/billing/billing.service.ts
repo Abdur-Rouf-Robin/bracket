@@ -11,7 +11,6 @@ import {
   PLANS,
   PLAN_LIST,
   type AdminGrantPlanInput,
-  type BillingInterval,
   type BillingMeResponse,
   type CheckoutInput,
   type CheckoutResponse,
@@ -47,12 +46,6 @@ export class BillingService {
     );
   }
 
-  private priceId(interval: BillingInterval): string | undefined {
-    return interval === 'year'
-      ? this.config.get<string>('STRIPE_PRICE_PREMIER_YEARLY')
-      : this.config.get<string>('STRIPE_PRICE_PREMIER_MONTHLY');
-  }
-
   isConfigured(): boolean {
     const secret = this.config.get<string>('STRIPE_SECRET_KEY');
     const monthly = this.config.get<string>('STRIPE_PRICE_PREMIER_MONTHLY');
@@ -60,13 +53,13 @@ export class BillingService {
     return !!(secret && monthly && yearly);
   }
 
-  private envMaxParticipants(plan: PlanId): number {
-    const key =
-      plan === 'PREMIER' ? 'PREMIER_MAX_PARTICIPANTS' : 'FREE_MAX_PARTICIPANTS';
-    const fallback = plan === 'PREMIER' ? 512 : 256;
-    const raw = this.config.get<string | number>(key);
-    const n = raw == null || raw === '' ? fallback : Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
+  private envMaxParticipants(_plan: PlanId): number {
+    const raw =
+      this.config.get<string | number>('MAX_PARTICIPANTS') ??
+      this.config.get<string | number>('PREMIER_MAX_PARTICIPANTS') ??
+      this.config.get<string | number>('FREE_MAX_PARTICIPANTS');
+    const n = raw == null || raw === '' ? 4096 : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 4096;
   }
 
   limitsForPlan(plan: PlanId): PlanLimits {
@@ -131,75 +124,18 @@ export class BillingService {
   }
 
   async checkout(
-    userId: string,
-    input: CheckoutInput,
+    _userId: string,
+    _input: CheckoutInput,
   ): Promise<CheckoutResponse> {
-    const stripe = this.getStripe();
-    const price = this.priceId(input.interval);
-    if (!stripe || !this.isConfigured() || !price) {
-      return { configured: false };
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        stripeCustomerId: true,
-      },
-    });
-    if (!user) throw new NotFoundException('User not found');
-
-    let customerId = user.stripeCustomerId;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: user.name,
-        metadata: { userId },
-      });
-      customerId = customer.id;
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { stripeCustomerId: customerId },
-      });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      line_items: [{ price, quantity: 1 }],
-      success_url: `${this.appUrl()}/settings/billing?success=1`,
-      cancel_url: `${this.appUrl()}/pricing?cancelled=1`,
-      metadata: { type: 'subscription', userId },
-      subscription_data: {
-        metadata: { type: 'subscription', userId },
-      },
-    });
-    if (!session.url) {
-      throw new BadRequestException('Stripe did not return a checkout URL');
-    }
-    return { url: session.url };
+    throw new BadRequestException(
+      'Platform subscriptions are not offered. Stripe is only for your own entry fees and tickets.',
+    );
   }
 
-  async portal(userId: string): Promise<CheckoutResponse> {
-    const stripe = this.getStripe();
-    if (!stripe || !this.isConfigured()) {
-      return { configured: false };
-    }
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { stripeCustomerId: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    if (!user.stripeCustomerId) {
-      throw new BadRequestException('No billing account yet — upgrade first');
-    }
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
-      return_url: `${this.appUrl()}/settings/billing`,
-    });
-    return { url: session.url };
+  async portal(_userId: string): Promise<CheckoutResponse> {
+    throw new BadRequestException(
+      'There is no platform billing portal. The site is free forever.',
+    );
   }
 
   async grantPlan(input: AdminGrantPlanInput) {

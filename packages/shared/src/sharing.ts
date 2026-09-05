@@ -315,7 +315,14 @@ export type ParticipantAccessMatch = {
 };
 
 export type ParticipantAccessPayload = {
-  team: { id: string; name: string; seed: number | null; logoUrl: string | null; players: string[] };
+  team: {
+    id: string;
+    name: string;
+    seed: number | null;
+    logoUrl: string | null;
+    players: string[];
+    checkedIn: boolean;
+  };
   tournament: {
     id: string;
     slug: string;
@@ -338,6 +345,27 @@ export type ParticipantAccessPayload = {
     groupSize: number;
   } | null;
   record: { wins: number; losses: number; draws: number };
+  actions: {
+    requireCheckIn: boolean;
+    checkedIn: boolean;
+    canCheckIn: boolean;
+    canReportScore: boolean;
+  };
+};
+
+export type PlayerHubItem = {
+  team: { id: string; name: string; checkedIn: boolean };
+  tournament: {
+    id: string;
+    slug: string;
+    name: string;
+    status: string;
+    logoUrl: string | null;
+  };
+  nextMatch: ParticipantAccessMatch | null;
+  requireCheckIn: boolean;
+  canCheckIn: boolean;
+  canReportScore: boolean;
 };
 
 // ---------------------------------------------------------------------------

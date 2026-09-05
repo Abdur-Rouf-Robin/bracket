@@ -37,8 +37,9 @@ export function VerifyEmailBanner() {
       <div className="flex-1">
         <p className="font-semibold">Verify your email address</p>
         <p className="text-xs text-[var(--color-muted)]">
-          We sent a link to <span className="font-medium text-[var(--color-ink)]">{user.email}</span>. Verifying unlocks
-          notifications, registrations and password recovery.
+          {user.emailConfigured === false
+            ? 'This server is not sending mail yet (no RESEND_API_KEY). Add a Resend key so verify and reset emails actually arrive.'
+            : <>We sent a link to <span className="font-medium text-[var(--color-ink)]">{user.email}</span>. Verifying unlocks notifications, registrations and password recovery.</>}
         </p>
       </div>
       <Button size="sm" variant="outline" onClick={resend} loading={sending} disabled={sent}>

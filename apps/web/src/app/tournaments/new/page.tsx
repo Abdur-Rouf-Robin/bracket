@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { BulkTeamInput } from '@/components/bulk-team-input';
+import { BulkTeamInput, parseBulkTeams } from '@/components/bulk-team-input';
 import { PredictionCustomFieldsEditor } from '@/components/prediction-custom-fields-editor';
 import { ImageUrlField } from '@/components/image-url-field';
 import { SHARE_IMAGE_ASSET_SPECS } from '@bracket/shared';
@@ -32,6 +32,21 @@ import { useAuth } from '@/lib/auth';
 import type { Tournament } from '@/lib/types';
 
 type Step = 'basics' | 'count' | 'format' | 'rules' | 'registration' | 'teams';
+type WizardMode = 'quick' | 'advanced';
+type QuickFormat =
+  | 'SINGLE_ELIMINATION'
+  | 'DOUBLE_ELIMINATION'
+  | 'ROUND_ROBIN'
+  | 'SWISS';
+
+const QUICK_FORMATS: { value: QuickFormat; label: string; hint: string }[] = [
+  { value: 'SINGLE_ELIMINATION', label: 'Single elim', hint: 'Lose once and you are out' },
+  { value: 'DOUBLE_ELIMINATION', label: 'Double elim', hint: 'Must lose twice' },
+  { value: 'ROUND_ROBIN', label: 'Round robin', hint: 'Everyone plays everyone' },
+  { value: 'SWISS', label: 'Swiss', hint: 'Paired by record each round' },
+];
+
+const SINGLE_STAGE_VALUES = new Set(SINGLE_STAGE_OPTIONS.map((o) => o.value));
 
 type Game = { id: string; name: string; category: string };
 
@@ -68,6 +83,9 @@ export default function NewTournamentPage() {
   const { user, token, loading } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState<Step>('basics');
+  const [wizardMode, setWizardMode] = useState<WizardMode>('quick');
+  const [quickFormat, setQuickFormat] = useState<QuickFormat>('SINGLE_ELIMINATION');
+  const [participantText, setParticipantText] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -115,6 +133,31 @@ export default function NewTournamentPage() {
     const sp = new URLSearchParams(window.location.search);
     setCommunityId(sp.get('community'));
     setTemplateId(sp.get('template'));
+    const format = sp.get('format');
+    if (format === 'GROUPS_KNOCKOUT') {
+      setSettings((s) => ({ ...s, stageMode: 'TWO_STAGE' }));
+      setWizardMode('advanced');
+    } else if (format && SINGLE_STAGE_VALUES.has(format as (typeof SINGLE_STAGE_OPTIONS)[number]['value'])) {
+      const single = format as (typeof SINGLE_STAGE_OPTIONS)[number]['value'];
+      setSettings((s) => ({
+        ...s,
+        stageMode: 'SINGLE',
+        singleStageFormat: single,
+      }));
+      if (
+        single === 'SINGLE_ELIMINATION' ||
+        single === 'DOUBLE_ELIMINATION' ||
+        single === 'ROUND_ROBIN' ||
+        single === 'SWISS'
+      ) {
+        setQuickFormat(single);
+      } else {
+        setWizardMode('advanced');
+      }
+    }
+    if (sp.get('advanced') === '1' || sp.get('template')) {
+      setWizardMode('advanced');
+    }
   }, []);
   useEffect(() => {
     if (!token || !templateId) return;
@@ -430,6 +473,78 @@ export default function NewTournamentPage() {
     }
   }
 
+  async function finishQuick() {
+    if (!token || !name.trim()) {
+      setError('Give the tournament a name');
+      return;
+    }
+    const parsed = parseBulkTeams(participantText);
+    if (parsed.length < 2) {
+      setError('Add at least two participants, one per line');
+      return;
+    }
+    setPending(true);
+    setError('');
+    try {
+      const nextSettings = {
+        ...settings,
+        stageMode: 'SINGLE' as const,
+        singleStageFormat: quickFormat,
+      };
+      const created = await api<Tournament>('/tournaments', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          gameId: gameId || null,
+          isPublic,
+          pointsWin,
+          pointsDraw,
+          settings: {
+          ...nextSettings,
+          allowParticipantsReportScores: true,
+          participantAccessPages: true,
+        },
+        }),
+      });
+      if (communityId) {
+        try {
+          await api(`/communities/${communityId}/tournaments/${created.id}`, {
+            method: 'POST',
+            token,
+          });
+        } catch (err) {
+          setError(
+            `Tournament created, but could not attach to community: ${
+              err instanceof Error ? err.message : 'unknown error'
+            }`,
+          );
+        }
+      }
+      await api(`/tournaments/${created.id}/teams`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          teams: parsed.map((p) => ({
+            name: p.name,
+            players: p.players,
+          })),
+        }),
+      });
+      const generated = await api<Tournament>(`/tournaments/${created.id}/generate`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ format: quickFormat, useSavedSettings: true }),
+      });
+      router.push(`/t/${generated.slug}/manage`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setPending(false);
+    }
+  }
+
   const gamesByCategory = useMemo(() => {
     const map = new Map<string, Game[]>();
     for (const g of games) {
@@ -461,6 +576,126 @@ export default function NewTournamentPage() {
     <div className="min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-6 py-10">
+        <div className="mb-6 flex gap-2">
+          <button
+            type="button"
+            className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+              wizardMode === 'quick' ? 'choice-btn-active' : 'choice-btn'
+            }`}
+            onClick={() => setWizardMode('quick')}
+          >
+            Quick create
+          </button>
+          <button
+            type="button"
+            className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+              wizardMode === 'advanced' ? 'choice-btn-active' : 'choice-btn'
+            }`}
+            onClick={() => {
+              setSettings((s) => ({
+                ...s,
+                stageMode: 'SINGLE',
+                singleStageFormat: quickFormat,
+              }));
+              setWizardMode('advanced');
+            }}
+          >
+            Advanced
+          </button>
+        </div>
+
+        {wizardMode === 'quick' && (
+          <>
+            <p className="text-sm font-medium uppercase tracking-wide text-[var(--color-muted)]">
+              Quick create
+            </p>
+            <h1 className="mt-2 font-display text-3xl font-bold">New tournament</h1>
+            <p className="mt-2 text-[var(--color-muted)]">
+              Name, format, paste names, generate. Open Advanced for groups, registration
+              and scoring rules.
+            </p>
+            {(templateName || communityId) && (
+              <p className="mt-3 text-xs text-[var(--color-muted)]">
+                {templateName ? `Prefilled from template “${templateName}”. ` : ''}
+                {communityId ? 'This tournament will be hosted by your community.' : ''}
+              </p>
+            )}
+            <div className="panel-card mt-8 space-y-5 rounded-2xl p-6">
+              <div>
+                <Label>Tournament name</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Friday night bracket"
+                />
+              </div>
+              <div>
+                <Label>Game</Label>
+                <Select
+                  className="mt-1"
+                  value={gameId}
+                  onChange={onGameChange}
+                  placeholder="Select a game…"
+                  groups={gamesByCategory.map(([category, list]) => ({
+                    label: category,
+                    options: list.map((g) => ({ value: g.id, label: g.name })),
+                  }))}
+                />
+              </div>
+              <div>
+                <Label>Format</Label>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {QUICK_FORMATS.map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setQuickFormat(f.value)}
+                      className={`rounded-xl px-3 py-2.5 text-left text-sm ${
+                        quickFormat === f.value ? 'choice-btn-active' : 'choice-btn'
+                      }`}
+                    >
+                      <span className="block font-medium">{f.label}</span>
+                      <span className="block text-xs text-[var(--color-muted)]">{f.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="quick-participants">Participants</Label>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  One name per line. Teams: Name | Player1, Player2
+                </p>
+                <textarea
+                  id="quick-participants"
+                  className="field-textarea mt-2 min-h-[160px]"
+                  value={participantText}
+                  onChange={(e) => setParticipantText(e.target.value)}
+                  placeholder={'Alex\nJordan\nSam\nRiley'}
+                />
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  {parseBulkTeams(participantText).length} names
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--color-accent)]"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                  />
+                  Public page
+                </label>
+                <Button disabled={pending} onClick={() => void finishQuick()}>
+                  {pending ? 'Generating…' : 'Generate tournament'}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {wizardMode === 'advanced' && (
+          <>
         <div className="mb-8 flex gap-2">
           {[1, 2, 3, 4, 5, 6].map((n) => (
             <div
@@ -1731,6 +1966,8 @@ export default function NewTournamentPage() {
               </Button>
             </div>
           </div>
+        )}
+          </>
         )}
 
         {error && <p className="mt-4 text-sm text-red-700">{error}</p>}

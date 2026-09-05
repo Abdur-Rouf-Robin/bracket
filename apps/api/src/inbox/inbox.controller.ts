@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -9,8 +10,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  updateInboxPreferencesSchema,
+  type UpdateInboxPreferencesInput,
+} from '@bracket/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { InboxService } from './inbox.service';
 
 @ApiTags('inbox')
@@ -40,16 +46,18 @@ export class InboxController {
     return { unreadCount: await this.inbox.unreadCount(user.id) };
   }
 
-  /** Notification preferences are not persisted yet (no column); expose a stable stub. */
   @Get('preferences')
-  preferences() {
-    return {
-      persisted: false,
-      channels: {
-        inApp: true,
-        email: true,
-      },
-    };
+  preferences(@CurrentUser() user: { id: string }) {
+    return this.inbox.getPreferences(user.id);
+  }
+
+  @Patch('preferences')
+  updatePreferences(
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(updateInboxPreferencesSchema))
+    body: UpdateInboxPreferencesInput,
+  ) {
+    return this.inbox.updatePreferences(user.id, body);
   }
 
   @Post('read-all')

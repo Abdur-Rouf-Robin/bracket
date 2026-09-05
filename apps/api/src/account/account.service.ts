@@ -14,9 +14,12 @@ import type {
   UpdateAccountInput,
 } from '@bracket/shared';
 import { isReservedUsername } from '@bracket/shared';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+const DEFAULT_PASSWORDS = ['password123'];
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
@@ -37,6 +40,8 @@ export type AccountUser = {
   role: 'USER' | 'ADMIN';
   countryCode: string | null;
   createdAt: string;
+  mustChangePassword: boolean;
+  emailConfigured: boolean;
 };
 
 const ACCOUNT_SELECT = {
@@ -85,7 +90,28 @@ export class AccountService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
+    private readonly config: ConfigService,
   ) {}
+
+  emailConfigured() {
+    return !!this.config.get<string>('RESEND_API_KEY');
+  }
+
+  private async mustChangePassword(userId: string, passwordHash?: string) {
+    const hash =
+      passwordHash ??
+      (
+        await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { passwordHash: true },
+        })
+      )?.passwordHash;
+    if (!hash) return false;
+    for (const guess of DEFAULT_PASSWORDS) {
+      if (await bcrypt.compare(guess, hash)) return true;
+    }
+    return false;
+  }
 
   // ---------------------------------------------------------------------
   // Account
@@ -98,7 +124,9 @@ export class AccountService {
     });
     if (!user) throw new UnauthorizedException();
     const plan = await this.access.userPlan(userId);
-    return this.toAccountUser({ ...user, plan });
+    const account = this.toAccountUser({ ...user, plan });
+    account.mustChangePassword = await this.mustChangePassword(userId);
+    return account;
   }
 
   toAccountUser(user: {
@@ -132,6 +160,8 @@ export class AccountService {
       role: user.role,
       countryCode: user.countryCode,
       createdAt: user.createdAt.toISOString(),
+      mustChangePassword: false,
+      emailConfigured: this.emailConfigured(),
     };
   }
 
@@ -188,6 +218,9 @@ export class AccountService {
     if (!user) throw new UnauthorizedException();
     const ok = await bcrypt.compare(input.currentPassword, user.passwordHash);
     if (!ok) throw new BadRequestException('Current password is incorrect');
+    if (DEFAULT_PASSWORDS.includes(input.newPassword)) {
+      throw new BadRequestException('Choose a password that is not the public demo password');
+    }
     const passwordHash = await bcrypt.hash(input.newPassword, 10);
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
     await this.prisma.passwordResetToken.updateMany({

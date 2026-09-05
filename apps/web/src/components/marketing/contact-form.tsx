@@ -15,7 +15,7 @@ const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'support@bracket.
 
 const TOPICS = [
   { value: 'support', label: 'Help with a tournament' },
-  { value: 'premier', label: 'Premier & billing' },
+  { value: 'billing', label: 'Entry fees & tickets' },
   { value: 'help', label: 'Help article feedback' },
   { value: 'bug', label: 'Report a bug' },
   { value: 'partnership', label: 'Partnership / press' },
@@ -83,7 +83,7 @@ export function ContactForm() {
         <Textarea id="c-message" required minLength={10} value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-40" placeholder="What happened, what did you expect, and when?" />
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-[var(--color-muted)]">We usually reply within one business day. Premier gets priority.</p>
+        <p className="text-xs text-[var(--color-muted)]">We usually reply within one business day.</p>
         <Button type="submit"><Send /> Send message</Button>
       </div>
     </form>

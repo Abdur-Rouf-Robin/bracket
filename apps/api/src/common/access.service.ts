@@ -165,28 +165,11 @@ export class AccessService {
     return e;
   }
 
-  /** Returns the effective plan for a user (Premier if active subscription). */
-  async userPlan(userId: string): Promise<'FREE' | 'PREMIER'> {
-    const u = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        plan: true,
-        planExpiresAt: true,
-        role: true,
-        subscription: { select: { status: true, plan: true } },
-      },
-    });
-    if (!u) return 'FREE';
-    if (u.role === 'ADMIN') return 'PREMIER';
-    if (
-      u.subscription &&
-      (u.subscription.status === 'ACTIVE' || u.subscription.status === 'TRIALING')
-    ) {
-      return u.subscription.plan;
-    }
-    if (u.plan === 'PREMIER') {
-      if (!u.planExpiresAt || u.planExpiresAt > new Date()) return 'PREMIER';
-    }
-    return 'FREE';
+  /**
+   * Every organizer gets the full feature set. Plans stay in the schema for
+   * compatibility, but nothing is paywalled.
+   */
+  async userPlan(_userId: string): Promise<'FREE' | 'PREMIER'> {
+    return 'PREMIER';
   }
 }

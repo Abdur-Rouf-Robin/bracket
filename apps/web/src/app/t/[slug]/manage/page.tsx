@@ -139,15 +139,41 @@ export default function ManageTournamentPage() {
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!token || !data) return;
-      return api(`/tournaments/${data.id}`, {
-        method: 'PATCH',
+      return api(`/tournaments/${data.id}/complete`, { method: 'POST', token });
+    },
+    onSuccess: async () => {
+      toast.success('Tournament completed');
+      await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      if (!token || !data) return;
+      return api(`/tournaments/${data.id}/generate`, {
+        method: 'POST',
         token,
-        body: JSON.stringify({ status: 'COMPLETED' }),
+        body: JSON.stringify({ useSavedSettings: true }),
       });
     },
     onSuccess: async () => {
+      toast.success('Bracket generated');
       await qc.invalidateQueries({ queryKey: ['tournament', slug] });
     },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: async () => {
+      if (!token || !data) return;
+      return api(`/tournaments/${data.id}/reopen`, { method: 'POST', token });
+    },
+    onSuccess: async () => {
+      toast.success('Tournament reopened');
+      await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const resetMutation = useMutation({
@@ -255,6 +281,23 @@ export default function ManageTournamentPage() {
                 )}
               </div>
             </div>
+
+            <TournamentStageStepper
+              className="mt-6"
+              tournament={data}
+              registrationOpen={
+                (data.settings as { registrationMode?: string } | undefined)
+                  ?.registrationMode === 'OPEN_SIGNUP'
+              }
+              onGenerate={() => generateMutation.mutate()}
+              onComplete={() => completeMutation.mutate()}
+              onReopen={() => reopenMutation.mutate()}
+              busy={
+                generateMutation.isPending ||
+                completeMutation.isPending ||
+                reopenMutation.isPending
+              }
+            />
 
             <TournamentSectionNav
               basePath={basePath}
