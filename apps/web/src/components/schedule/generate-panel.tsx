@@ -40,6 +40,7 @@ type FormState = {
   respectRounds: boolean;
   useReferees: boolean;
   stationIds: string[];
+  blackouts: ScheduleDay[];
 };
 
 function fromConfig(cfg: ScheduleConfigInput, fallbackTz: string): FormState {
@@ -53,6 +54,7 @@ function fromConfig(cfg: ScheduleConfigInput, fallbackTz: string): FormState {
     respectRounds: cfg.respectRounds ?? true,
     useReferees: cfg.useReferees ?? true,
     stationIds: cfg.stationIds ?? [],
+    blackouts: cfg.blackouts ?? [],
   };
 }
 
@@ -69,6 +71,7 @@ function toConfig(f: FormState): ScheduleConfigInput {
     stageOrder: 'groups-first',
     useReferees: f.useReferees,
     stationIds: f.stationIds,
+    blackouts: f.blackouts.filter((b) => b.date && b.startTime && b.endTime && b.startTime < b.endTime),
   };
 }
 
@@ -209,6 +212,46 @@ export function GeneratePanel({
                   <button
                     type="button"
                     onClick={() => upd({ days: form.days.filter((_, idx) => idx !== i) })}
+                    className="ml-auto rounded p-1 text-[var(--color-muted)] hover:text-[var(--color-danger)]"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <Label className="mb-0">Blackouts</Label>
+              <button
+                type="button"
+                onClick={() =>
+                  upd({
+                    blackouts: [
+                      ...form.blackouts,
+                      { date: form.days[0]?.date ?? '', startTime: '12:00', endTime: '13:00' },
+                    ],
+                  })
+                }
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)]"
+              >
+                <Plus className="size-3.5" /> Add blackout
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-[var(--color-muted)]">
+              Lunch, ceremonies and closures. The scheduler will not place matches here, and a drag into one is flagged before you save.
+            </p>
+            <div className="mt-2 space-y-2">
+              {form.blackouts.map((d, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <Input type="date" value={d.date} onChange={(e) => upd({ blackouts: form.blackouts.map((b, idx) => idx === i ? { ...b, date: e.target.value } : b) })} className="w-40 py-1" />
+                  <Input type="time" value={d.startTime} onChange={(e) => upd({ blackouts: form.blackouts.map((b, idx) => idx === i ? { ...b, startTime: e.target.value } : b) })} className="w-28 py-1" />
+                  <span className="text-xs text-[var(--color-muted)]">→</span>
+                  <Input type="time" value={d.endTime} onChange={(e) => upd({ blackouts: form.blackouts.map((b, idx) => idx === i ? { ...b, endTime: e.target.value } : b) })} className="w-28 py-1" />
+                  <button
+                    type="button"
+                    onClick={() => upd({ blackouts: form.blackouts.filter((_, idx) => idx !== i) })}
                     className="ml-auto rounded p-1 text-[var(--color-muted)] hover:text-[var(--color-danger)]"
                   >
                     <Trash2 className="size-4" />

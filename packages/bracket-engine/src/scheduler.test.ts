@@ -100,6 +100,20 @@ describe('buildTimeSlots', () => {
       '2026-06-07',
     ]);
   });
+
+  it('skips slots that overlap a blackout', () => {
+    const slots = buildTimeSlots({
+      days: [{ date: '2026-06-06', startTime: '09:00', endTime: '13:00' }],
+      slotMinutes: 60,
+      timezone: 'UTC',
+      blackouts: [{ date: '2026-06-06', startTime: '12:00', endTime: '13:00' }],
+    });
+    expect(slots.map((s) => new Date(s.startMs).toISOString().slice(11, 16))).toEqual([
+      '09:00',
+      '10:00',
+      '11:00',
+    ]);
+  });
 });
 
 describe('orderMatchesForScheduling', () => {

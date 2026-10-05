@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Check } from 'lucide-react';
-import type { BillingMeResponse } from '@bracket/shared';
+import type { BillingMeResponse, CheckoutResponse } from '@bracket/shared';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { PLANS } from '@/lib/plans';
+import { PLAN_LIST, formatPlanPrice } from '@/lib/plans';
 
 export function useBillingMe() {
   const { token } = useAuth();
@@ -26,33 +27,66 @@ export function useBillingMe() {
 }
 
 export function PricingPlans() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const checkout = useMutation({
+    mutationFn: (interval: 'month' | 'year') =>
+      api<CheckoutResponse>('/billing/checkout', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ interval }),
+      }),
+    onSuccess: (res) => {
+      if ('url' in res && res.url) {
+        window.location.href = res.url;
+        return;
+      }
+      toast.message('Premier checkout needs Stripe price IDs in the API environment.');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   return (
-    <div className="mx-auto max-w-xl">
-      <div className="card flex flex-col p-7">
-        <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-muted)]">
-          {PLANS.FREE.name}
-        </p>
-        <p className="font-display mt-3 text-5xl font-bold">$0</p>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">{PLANS.FREE.tagline}</p>
-        <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-          {PLANS.FREE.features.map((f) => (
-            <li key={f} className="flex items-start gap-2">
-              <Check className="mt-0.5 size-4 shrink-0 text-[var(--color-ok)]" aria-hidden />
-              {f}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-xs text-[var(--color-muted)]">
-          Optional Stripe is only for your own entry fees and event tickets. We never charge
-          you a platform subscription.
-        </p>
-        <Button variant="primary" size="lg" className="mt-6 w-full" asChild>
-          <Link href={user ? '/dashboard' : '/register'}>
-            {user ? 'Go to dashboard' : 'Get started free'}
-          </Link>
-        </Button>
-      </div>
+    <div className="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">
+      {PLAN_LIST.map((plan) => (
+        <div key={plan.id} className="card flex flex-col p-7">
+          <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-muted)]">
+            {plan.name}
+          </p>
+          <p className="font-display mt-3 text-5xl font-bold">
+            {formatPlanPrice(plan.priceMonthlyCents)}
+          </p>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            {plan.priceMonthlyCents === 0
+              ? plan.tagline
+              : `${plan.tagline} ${formatPlanPrice(plan.priceYearlyCents)} billed yearly.`}
+          </p>
+          <ul className="mt-6 flex-1 space-y-2.5 text-sm">
+            {plan.features.map((f) => (
+              <li key={f} className="flex items-start gap-2">
+                <Check className="mt-0.5 size-4 shrink-0 text-[var(--color-ok)]" aria-hidden />
+                {f}
+              </li>
+            ))}
+          </ul>
+          {plan.id === 'FREE' ? (
+            <Button variant="secondary" size="lg" className="mt-6 w-full" asChild>
+              <Link href={user ? '/dashboard' : '/register'}>
+                {user ? 'Go to dashboard' : 'Get started free'}
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="lg"
+              className="mt-6 w-full"
+              disabled={!token || checkout.isPending}
+              onClick={() => checkout.mutate('month')}
+            >
+              {token ? 'Upgrade to Premier' : 'Sign in to upgrade'}
+            </Button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

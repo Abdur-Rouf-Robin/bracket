@@ -14,6 +14,7 @@ import {
   FormatGrid,
   HomeFaq,
   HowItWorks,
+  LiveRail,
   PricingTeaser,
   SportsLinks,
   Testimonials,
@@ -21,9 +22,11 @@ import {
 } from '@/components/marketing/home-sections';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
+import { useLocale } from '@/lib/locale';
 
 function Hero() {
   const { user } = useAuth();
+  const { locale, t } = useLocale();
   const demo = useMemo(
     () => buildPreview('SINGLE_ELIMINATION', SAMPLE_TEAMS, { thirdPlace: false, seed: 7 }),
     [],
@@ -43,17 +46,23 @@ function Hero() {
       <div className="container-page relative grid items-center gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
         <div>
           <span className="badge badge-accent">
-            <Sparkles className="size-3" aria-hidden /> New: auto-scheduler, communities & events
+            <Sparkles className="size-3" aria-hidden /> Brackets, courts, and a live table
           </span>
           <h1 className="font-display mt-5 text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-            Run any tournament.
-            <br />
-            <span className="gradient-text">Brackets, schedules, live results.</span>
+            {locale === 'en' ? (
+              <>
+                A live bracket
+                <br />
+                <span className="gradient-text">and a real venue schedule.</span>
+              </>
+            ) : (
+              t('hero.title')
+            )}
           </h1>
           <p className="mt-5 max-w-xl text-lg text-[var(--color-muted)]">
-            Single and double elimination, round robin, Swiss, groups + knockout, leaderboards and
-            racing. Generate in seconds, run it from your phone, and let everyone follow live —
-            no login needed for viewers.
+            {locale === 'en'
+              ? 'Share one link. Score from your phone. Courts, rest rules and blackouts stay in sync with the bracket — including ball-by-ball cricket, which the usual bracket tools do not run.'
+              : t('hero.body')}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button size="lg" className="gaming-glow" asChild>
@@ -68,7 +77,9 @@ function Hero() {
             </Button>
           </div>
           <p className="mt-4 text-xs text-[var(--color-muted)]">
-            Free forever for up to 256 participants · No credit card
+            {locale === 'en'
+              ? 'Starter is free for one active tournament · Viewers never need an account'
+              : t('hero.fine')}
           </p>
 
           <div className="mt-10 hidden lg:block">
@@ -92,6 +103,7 @@ export default function HomePage() {
     <MarketingShell>
       <Hero />
       <TrustBand />
+      <LiveRail />
       <HowItWorks />
       <FormatGrid />
       <FeatureGrid />

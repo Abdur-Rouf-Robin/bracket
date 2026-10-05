@@ -19,6 +19,8 @@ const BRACKET_FORMATS = new Set([
   'SINGLE_ELIMINATION',
   'DOUBLE_ELIMINATION',
   'GROUPS_KNOCKOUT',
+  'GAUNTLET',
+  'CUSTOM_BRACKET',
 ]);
 
 export default function ShareBracketPage() {

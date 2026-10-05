@@ -138,6 +138,48 @@ function seedSlots(size: number): number[] {
   return result;
 }
 
+/** Winner stays on. Seed 1 plays seed 2; the winner faces seed 3, and so on. */
+export function generateGauntlet(teams: EngineTeam[]): GeneratedMatch[] {
+  const sorted = [...teams].sort(
+    (a, b) => (a.seed ?? 999) - (b.seed ?? 999) || a.name.localeCompare(b.name),
+  );
+  if (sorted.length < 2) return [];
+  const matches: GeneratedMatch[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const round = i + 1;
+    const key = `ga-r${round}-p0`;
+    const nextKey = i < sorted.length - 2 ? `ga-r${round + 1}-p0` : null;
+    matches.push({
+      key,
+      round,
+      position: 0,
+      bracketSide: nextKey ? BracketSide.WINNERS : BracketSide.FINAL,
+      homeTeamId: i === 0 ? sorted[0]!.id : null,
+      awayTeamId: sorted[i + 1]!.id,
+      nextMatchKey: nextKey,
+      nextMatchSlot: nextKey ? 'home' : null,
+    });
+  }
+  return matches;
+}
+
+/** List order is the bracket: 1 plays 2, 3 plays 4, winners meet in that order. */
+export function generateCustomBracket(
+  teams: EngineTeam[],
+  options: GenerateOptions = {},
+): GeneratedMatch[] {
+  return generateSingleElimination(teams, { ...options, pairing: 'SEQUENTIAL' }).map(
+    (m) => ({
+      ...m,
+      key: m.key.replace(/^se-/, 'cb-'),
+      homeFromMatchKey: m.homeFromMatchKey?.replace(/^se-/, 'cb-') ?? null,
+      awayFromMatchKey: m.awayFromMatchKey?.replace(/^se-/, 'cb-') ?? null,
+      nextMatchKey: m.nextMatchKey?.replace(/^se-/, 'cb-') ?? null,
+      loserNextMatchKey: m.loserNextMatchKey?.replace(/^se-/, 'cb-') ?? null,
+    }),
+  );
+}
+
 export function generateSingleElimination(
   teams: EngineTeam[],
   options: GenerateOptions = {},
@@ -149,10 +191,10 @@ export function generateSingleElimination(
     Math.max(2, sorted.length, options.minBracketSize ?? 0),
   );
   const slots = seedSlots(bracketSize);
-  const seeded: (EngineTeam | null)[] = slots.map((seed) => {
-    const team = sorted[seed - 1];
-    return team ?? null;
-  });
+  const seeded: (EngineTeam | null)[] =
+    options.pairing === 'SEQUENTIAL'
+      ? Array.from({ length: bracketSize }, (_, i) => sorted[i] ?? null)
+      : slots.map((seed) => sorted[seed - 1] ?? null);
 
   const matches: GeneratedMatch[] = [];
   const totalRounds = Math.log2(bracketSize);
@@ -933,6 +975,20 @@ export function suggestFormats(
       category: 'Bracket',
       reason: 'Must lose twice. Winners + losers brackets.',
       recommended: teamCount >= 6 && teamCount <= 16,
+    },
+    {
+      format: TournamentFormat.GAUNTLET,
+      label: 'Gauntlet',
+      category: 'Bracket',
+      reason: 'Winner stays. The next seed challenges.',
+      recommended: teamCount >= 3 && teamCount <= 8 && !hasGroups,
+    },
+    {
+      format: TournamentFormat.CUSTOM_BRACKET,
+      label: 'Custom bracket',
+      category: 'Bracket',
+      reason: 'List order is the bracket. 1 plays 2, 3 plays 4.',
+      recommended: false,
     },
     {
       format: TournamentFormat.ROUND_ROBIN,

@@ -207,6 +207,7 @@ export default function ManageTournamentPage() {
         showStandings: settings?.showStandings !== false,
         isOwner: !!data.isOwner,
         canManage: !!data.canManage,
+        canConfigure: data.canConfigure !== false,
       })
     : [];
 
@@ -298,6 +299,14 @@ export default function ManageTournamentPage() {
                 reopenMutation.isPending
               }
             />
+
+            <div className="mt-4 flex flex-wrap gap-2 text-sm">
+              <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href={`${basePath}?tab=schedule&sub=generate`}>Schedule</Link>
+              <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href={`${basePath}?tab=matches&sub=play`}>Score</Link>
+              <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href={`/t/${data.slug}`}>Public page</Link>
+              <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href="/circuits">Add to a circuit</Link>
+              <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href="/communities">Community</Link>
+            </div>
 
             <TournamentSectionNav
               basePath={basePath}

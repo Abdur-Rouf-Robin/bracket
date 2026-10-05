@@ -6,10 +6,33 @@ import { SettingsShell } from '@/components/account/settings-shell';
 import { useBillingMe } from '@/components/marketing/pricing-plans';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PLANS } from '@/lib/plans';
+import { PLANS, formatPlanPrice } from '@/lib/plans';
+import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import type { CheckoutResponse } from '@bracket/shared';
 
 function BillingPanel() {
+  const { token } = useAuth();
   const { data: me, isLoading } = useBillingMe();
+  const plan = me?.plan === 'PREMIER' ? PLANS.PREMIER : PLANS.FREE;
+  const checkout = useMutation({
+    mutationFn: () =>
+      api<CheckoutResponse>('/billing/checkout', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ interval: 'month' }),
+      }),
+    onSuccess: (res) => {
+      if ('url' in res && res.url) {
+        window.location.href = res.url;
+        return;
+      }
+      toast.message('Premier checkout needs Stripe price IDs in the API environment.');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   if (isLoading) {
     return <p className="text-sm text-[var(--color-muted)]">Loading…</p>;
@@ -23,36 +46,39 @@ function BillingPanel() {
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
               Platform plan
             </p>
-            <h2 className="font-display mt-1 text-2xl font-bold">Free forever</h2>
-            <p className="mt-1 text-sm text-[var(--color-muted)]">{PLANS.FREE.tagline}</p>
+            <h2 className="font-display mt-1 text-2xl font-bold">{plan.name}</h2>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">{plan.tagline}</p>
           </div>
-          <Badge variant="accent">Included</Badge>
+          <Badge variant="accent">{formatPlanPrice(plan.priceMonthlyCents)}/mo</Badge>
         </div>
         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-[var(--color-muted)]">Participants per tournament</dt>
-            <dd className="font-semibold">{me?.limits.maxParticipants ?? PLANS.FREE.limits.maxParticipants}</dd>
+            <dt className="text-[var(--color-muted)]">Active tournaments</dt>
+            <dd className="font-semibold">
+              {plan.limits.maxActiveTournaments == null ? 'Unlimited' : plan.limits.maxActiveTournaments}
+            </dd>
           </div>
           <div>
-            <dt className="text-[var(--color-muted)]">Ads / subscriptions</dt>
-            <dd className="font-semibold">None</dd>
+            <dt className="text-[var(--color-muted)]">Editors and co-admins</dt>
+            <dd className="font-semibold">{plan.limits.coAdmins ? 'Yes' : 'Owner only'}</dd>
           </div>
         </dl>
-        <p className="mt-4 text-sm text-[var(--color-muted)]">
-          Stripe is only for your own entry fees and event tickets. Bracket does not sell a
-          platform subscription.
-        </p>
         <div className="mt-6 flex flex-wrap gap-3">
+          {me?.plan !== 'PREMIER' && (
+            <Button disabled={checkout.isPending} onClick={() => checkout.mutate()}>
+              Upgrade to Premier
+            </Button>
+          )}
           <Button variant="secondary" asChild>
-            <Link href="/pricing">See what is included</Link>
+            <Link href="/pricing">Compare plans</Link>
           </Button>
         </div>
       </section>
 
       <section className="gaming-card rounded-2xl p-6">
-        <h2 className="font-display text-lg font-semibold">Included for every organizer</h2>
+        <h2 className="font-display text-lg font-semibold">On your plan</h2>
         <ul className="mt-3 space-y-2 text-sm">
-          {PLANS.FREE.features.map((f) => (
+          {plan.features.map((f) => (
             <li key={f} className="flex items-start gap-2">
               <Check className="mt-0.5 size-4 shrink-0 text-[var(--color-ok)]" aria-hidden />
               {f}
@@ -68,7 +94,7 @@ export default function SettingsBillingPage() {
   return (
     <SettingsShell
       title="Billing"
-      description="The platform is free. Optional Stripe is only for your own tickets and entry fees."
+      description="Starter is one active tournament. Premier removes the cap and adds editors."
     >
       <BillingPanel />
     </SettingsShell>

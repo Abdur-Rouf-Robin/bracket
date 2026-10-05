@@ -11,6 +11,7 @@ import { MatchStatus, Prisma, StationStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { z } from 'zod';
 import {
+  blackoutIntervals,
   dateKeyInZone,
   detectConflicts,
   generateSchedule,
@@ -212,7 +213,11 @@ export class SchedulingService {
           feederMatchIds: feeders.get(m.id) ?? [],
         };
       });
-    return detectConflicts(scheduled, config.restMinutes ?? config.slotMinutes);
+    return detectConflicts(
+      scheduled,
+      config.restMinutes ?? config.slotMinutes,
+      blackoutIntervals(config.blackouts, config.timezone),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -720,6 +725,7 @@ export class SchedulingService {
       timezone: config.timezone || t.timezone,
       respectRounds: config.respectRounds,
       stageOrder: config.stageOrder,
+      blackouts: config.blackouts,
     });
 
     const stationName = new Map(stations.map((s) => [s.id, s.name]));
@@ -809,6 +815,33 @@ export class SchedulingService {
     });
     if (!match) throw new NotFoundException('Match not found');
 
+    if (input.preview) {
+      const rows = await this.loadMatches(tournamentId);
+      const nextAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+      const hypothetical = rows.map((m) =>
+        m.id === matchId
+          ? {
+              ...m,
+              scheduledAt: input.scheduledAt !== undefined ? nextAt : m.scheduledAt,
+              stationId: input.stationId !== undefined ? input.stationId : m.stationId,
+              durationMinutes: input.durationMinutes !== undefined ? input.durationMinutes : m.durationMinutes,
+            }
+          : m,
+      );
+      const conflicts = await this.conflictsFor(
+        tournamentId,
+        hypothetical,
+        this.parseConfig(t.scheduleConfig, t.timezone),
+      );
+      const feeders = this.buildFeederMap(hypothetical);
+      const updated = hypothetical.find((m) => m.id === matchId)!;
+      return {
+        preview: true as const,
+        match: this.toDto(updated, feeders, { includeReferee: true, includePrivateStation: true }),
+        conflicts,
+      };
+    }
+
     const data: Prisma.MatchUncheckedUpdateInput = {};
     if (input.scheduledAt !== undefined) {
       data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
@@ -830,6 +863,16 @@ export class SchedulingService {
       }
     } else if (input.station !== undefined) {
       data.station = input.station;
+    }
+    if (input.lobbyCode !== undefined) {
+      data.lobbyCode = input.lobbyCode?.trim() || null;
+    }
+    if (input.lobbyUrl !== undefined) {
+      const url = input.lobbyUrl?.trim() || null;
+      if (url && !/^https?:\/\//i.test(url)) {
+        throw new BadRequestException('Lobby link must start with http:// or https://');
+      }
+      data.lobbyUrl = url;
     }
     if (input.refereeId !== undefined) {
       if (input.refereeId) {

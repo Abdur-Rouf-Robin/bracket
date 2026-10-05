@@ -18,7 +18,8 @@ import type {
   MatchResultInput,
   MatchScheduleInput,
 } from '@bracket/shared';
-import { gameRuleForGameName, tournamentSettingsSchema, rollupTeamFairPlayFromStats } from '@bracket/shared';
+import { PLANS, gameRuleForGameName, tournamentSettingsSchema, rollupTeamFairPlayFromStats } from '@bracket/shared';
+import { AccessService } from '../common/access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { JobsService } from '../jobs/jobs.service';
@@ -39,6 +40,7 @@ export class MatchesService {
     private readonly tournaments: TournamentsService,
     private readonly bracketRepair: BracketRepairService,
     private readonly rankings: RankingsService,
+    private readonly access: AccessService,
   ) {}
 
   async setResult(
@@ -66,6 +68,7 @@ export class MatchesService {
     if (!match.homeTeamId || !match.awayTeamId) {
       throw new BadRequestException('Match teams are not set yet');
     }
+    await this.assertActiveTournament(match.tournamentId);
 
     if (match.status === MatchStatus.COMPLETED && !input.force) {
       throw new BadRequestException(
@@ -593,6 +596,40 @@ export class MatchesService {
     }
     if (match.homeTeamId !== teamId && match.awayTeamId !== teamId) {
       throw new ForbiddenException('This is not your match');
+    }
+  }
+
+  /** Starter allows one tournament with a result in the last 30 days. */
+  private async assertActiveTournament(tournamentId: string) {
+    const t = await this.prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { id: true, createdById: true },
+    });
+    if (!t) return;
+    const plan = await this.access.userPlan(t.createdById);
+    const limit = PLANS[plan].limits.maxActiveTournaments;
+    if (limit == null) return;
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const active = await this.prisma.tournament.findMany({
+      where: {
+        createdById: t.createdById,
+        id: { not: t.id },
+        matches: {
+          some: {
+            status: MatchStatus.COMPLETED,
+            OR: [
+              { reportedAt: { gte: since } },
+              { updatedAt: { gte: since } },
+            ],
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (active.length >= limit) {
+      throw new ForbiddenException(
+        `Starter includes ${limit} active tournament. A tournament stays active for 30 days after a result. Upgrade to Premier for unlimited active tournaments.`,
+      );
     }
   }
 

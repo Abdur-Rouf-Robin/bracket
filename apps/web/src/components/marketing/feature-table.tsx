@@ -33,8 +33,8 @@ export function FeatureTable({
               Feature
             </th>
             <th scope="col" className="w-40 px-3 py-4 text-center align-bottom">
-              <p className="font-display text-base font-bold">Included</p>
-              <p className="text-xs text-[var(--color-muted)]">$0 forever</p>
+              <p className="font-display text-base font-bold">Features</p>
+              <p className="text-xs text-[var(--color-muted)]">Starter is free</p>
               {!compact && (
                 <Button size="sm" variant="secondary" className="mt-2 w-full" asChild>
                   <Link href="/register">Start free</Link>

@@ -9,7 +9,7 @@ import { FEATURE_SECTIONS } from '@/lib/plans';
 export const metadata: Metadata = {
   title: 'Features',
   description:
-    'Every format, game catalog, scheduler, export and cricket scoreboard is included — free forever.',
+    'Every format, the scheduler and the cricket scoreboard are on Starter. Premier lifts the active-tournament cap and adds editors.',
 };
 
 export default function FeaturesPage() {

@@ -26,9 +26,13 @@ import {
   Users,
   Vote,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import type { SearchResultItem } from '@bracket/shared';
 import { Button } from '@/components/ui/button';
 import { PLANS } from '@/lib/plans';
+import { api } from '@/lib/api';
 import { FORMAT_LINKS } from '@/components/site-header';
+import { TournamentCard } from '@/components/sharing/discovery-card';
 import { SectionHeading } from './marketing-shell';
 import { Faq } from './faq';
 
@@ -41,6 +45,8 @@ export const FORMAT_CARDS: { href: string; title: string; blurb: string; icon: t
   { href: '/formats/free-for-all', title: 'Free for all', blurb: 'Placement-based events — battle royale, party games, heats.', icon: Gamepad2, math: 'placement points' },
   { href: '/formats/leaderboard', title: 'Leaderboard', blurb: 'Multiple scoring events feeding a cumulative table.', icon: BarChart3, math: 'events × points' },
   { href: '/formats/racing', title: 'Racing', blurb: 'Time trials, single races and multi-race Grand Prix series.', icon: Bike, math: 'time or F1 points' },
+  { href: '/formats/gauntlet', title: 'Gauntlet', blurb: 'Winner stays. The next seed walks on.', icon: Swords, math: 'n − 1 matches' },
+  { href: '/formats/custom-bracket', title: 'Custom bracket', blurb: 'Your list order is the bracket. 1 plays 2, 3 plays 4.', icon: LayoutGrid, math: 'your pairings' },
 ];
 
 const FEATURES = [
@@ -95,7 +101,7 @@ const HOME_FAQ = [
   { q: 'Does it work on mobile?', a: 'Yes. Everything — including score entry, check-in and the station queue — is designed mobile-first so you can run the whole event from your phone.' },
   { q: 'Can participants be teams with rosters?', a: 'Yes. Participants can be individuals or teams with players, captains and substitutes. Player-level stats and MVP awards are available for team sports.' },
   { q: 'Can I keep a tournament private?', a: 'You can hide a tournament from browse and search engines, restrict it to a password, or keep it fully private to organizers until you are ready to publish.' },
-  { q: 'What does it cost?', a: `Nothing. Every format, game catalog, scheduler, export, embed theme and cricket scoreboard is free forever — up to ${PLANS.FREE.limits.maxParticipants} participants per tournament, unlimited events.` },
+  { q: 'What does it cost?', a: 'Starter is free for one active tournament — a tournament that had a result in the last 30 days. Premier is $9/month for unlimited active tournaments, co-admins and score editors. Viewers never pay.' },
 ];
 
 export function TrustBand() {
@@ -103,7 +109,7 @@ export function TrustBand() {
     { value: '10', label: 'formats supported' },
     { value: '0', label: 'logins needed for viewers' },
     { value: 'Live', label: 'updates on every device' },
-    { value: '$0', label: 'to start' },
+    { value: '1', label: 'free active tournament' },
   ];
   return (
     <section aria-label="Highlights" className="border-y border-[var(--color-line)] bg-[var(--color-surface)]/40">
@@ -274,10 +280,45 @@ export function Testimonials() {
   );
 }
 
+export function LiveRail() {
+  const { data } = useQuery({
+    queryKey: ['discover-landing'],
+    queryFn: () =>
+      api<{ live: SearchResultItem[]; upcoming: SearchResultItem[] }>('/discover/landing'),
+    staleTime: 30_000,
+    retry: 0,
+  });
+  const items = (data?.live?.length ? data.live : data?.upcoming ?? []).slice(0, 4);
+  if (!items.length) return null;
+  const live = !!data?.live?.length;
+  return (
+    <section className="container-page py-16">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="font-display text-xs font-bold uppercase tracking-[0.2em] text-[var(--color-accent)]">
+            {live ? 'Happening now' : 'Coming up'}
+          </p>
+          <h2 className="font-display mt-2 text-3xl font-bold tracking-tight">
+            {live ? 'Open a live tournament' : 'Tournaments you can follow'}
+          </h2>
+        </div>
+        <Button variant="outline" asChild>
+          <Link href="/browse">Find tournaments <ArrowRight /></Link>
+        </Button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((t) => (
+          <TournamentCard key={t.id} t={t} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function PricingTeaser() {
   return (
     <section className="container-page py-20">
-      <SectionHeading eyebrow="Pricing" title="Everything is free. Forever." />
+      <SectionHeading eyebrow="Pricing" title="Start free. Upgrade when you run more than one." />
       <div className="mx-auto mt-12 max-w-xl">
         <div className="card p-6">
           <p className="font-display text-sm font-bold uppercase tracking-widest text-[var(--color-muted)]">{PLANS.FREE.name}</p>

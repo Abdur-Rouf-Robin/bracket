@@ -78,6 +78,8 @@ export type Match = {
   scheduledAt?: string | null;
   durationMinutes?: number | null;
   station?: string | null;
+  lobbyCode?: string | null;
+  lobbyUrl?: string | null;
   stationId?: string | null;
   stationRef?: { id: string; name: string } | null;
   refereeId?: string | null;
@@ -182,6 +184,8 @@ export type Tournament = {
   previewHidden?: boolean;
   isOwner?: boolean;
   canManage?: boolean;
+  /** Owner or co-admin. Score editors have canManage without this. */
+  canConfigure?: boolean;
   game?: { id: string; name: string; category: string } | null;
   createdById: string;
   groups: Group[];

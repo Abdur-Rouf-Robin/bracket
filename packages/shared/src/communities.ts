@@ -109,6 +109,7 @@ export const createCommunitySchema = z.object({
   logoUrl: optionalUrl,
   bannerUrl: optionalUrl,
   isPublic: z.boolean().optional(),
+  customDomain: z.string().trim().max(253).optional().nullable(),
 });
 export type CreateCommunityInput = z.infer<typeof createCommunitySchema>;
 

@@ -241,6 +241,48 @@ export function suggestFormatPlans(
   const plans: FormatPlan[] = [];
 
   if (teamCount >= 2) plans.push(singleElimPlan(teamCount, boost('fc26')));
+  if (teamCount >= 3 && teamCount <= 16) {
+    plans.push({
+      id: `ga-${teamCount}`,
+      format: TournamentFormat.GAUNTLET,
+      label: 'Gauntlet',
+      category: 'Bracket',
+      reason: 'Winner stays. The next seed challenges.',
+      recommended: teamCount <= 8,
+      stageMode: 'SINGLE',
+      singleStageFormat: 'GAUNTLET',
+      finalStageFormat: 'SINGLE_ELIMINATION',
+      participantsPerGroup: 4,
+      advancePerGroup: 2,
+      groupCount: 0,
+      groupSizes: [],
+      knockoutSlots: teamCount,
+      byeCount: 0,
+      score: 48,
+      detail: `${teamCount} teams, ${teamCount - 1} matches. The champion is whoever wins the last challenge.`,
+    });
+  }
+  if (teamCount >= 2) {
+    plans.push({
+      id: `cb-${teamCount}`,
+      format: TournamentFormat.CUSTOM_BRACKET,
+      label: 'Custom bracket',
+      category: 'Bracket',
+      reason: 'Participant order is the bracket. 1 plays 2, 3 plays 4.',
+      recommended: false,
+      stageMode: 'SINGLE',
+      singleStageFormat: 'CUSTOM_BRACKET',
+      finalStageFormat: 'SINGLE_ELIMINATION',
+      participantsPerGroup: 4,
+      advancePerGroup: 2,
+      groupCount: 0,
+      groupSizes: [],
+      knockoutSlots: teamCount,
+      byeCount: 0,
+      score: 36,
+      detail: `${teamCount} teams paired in list order, then winners meet.`,
+    });
+  }
   if (teamCount >= 4) plans.push(doubleElimPlan(teamCount, boost('mobile-legends')));
 
   const rr = roundRobinPlan(teamCount);

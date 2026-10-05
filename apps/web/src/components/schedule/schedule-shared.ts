@@ -114,6 +114,8 @@ export function conflictLabel(kind: string) {
       return 'Referee double-booked';
     case 'DEPENDENCY_ORDER':
       return 'Before feeder match';
+    case 'BLACKOUT':
+      return 'Inside a blackout';
     default:
       return kind;
   }

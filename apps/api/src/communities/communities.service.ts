@@ -162,6 +162,46 @@ export class CommunitiesService {
     return { ...this.serialize(community), viewerRole: 'OWNER' as CommunityRole };
   }
 
+  private normalizeDomain(value: string | null | undefined): string | null {
+    if (!value || !value.trim()) return null;
+    const host = value
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]!
+      .replace(/:\d+$/, '');
+    if (
+      !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(
+        host,
+      )
+    ) {
+      throw new BadRequestException('Enter a domain like club.example.com');
+    }
+    return host;
+  }
+
+  private async claimDomain(id: string, value: string | null) {
+    const customDomain = this.normalizeDomain(value);
+    if (!customDomain) return null;
+    const taken = await this.prisma.community.findFirst({
+      where: { customDomain, NOT: { id } },
+      select: { id: true },
+    });
+    if (taken) throw new ConflictException('That domain is already used');
+    return customDomain;
+  }
+
+  async getByDomain(host: string) {
+    const customDomain = this.normalizeDomain(host);
+    if (!customDomain) throw new NotFoundException('Community not found');
+    const community = await this.prisma.community.findFirst({
+      where: { customDomain, isPublic: true },
+      select: { slug: true },
+    });
+    if (!community) throw new NotFoundException('Community not found');
+    return community;
+  }
+
   async update(id: string, userId: string, input: UpdateCommunityInput) {
     await this.access.requireCommunityRole(id, userId, 'ADMIN');
     let slug: string | undefined;
@@ -188,6 +228,10 @@ export class CommunitiesService {
         logoUrl: input.logoUrl,
         bannerUrl: input.bannerUrl,
         isPublic: input.isPublic,
+        customDomain:
+          input.customDomain !== undefined
+            ? await this.claimDomain(id, input.customDomain)
+            : undefined,
       },
       include: { games: { include: { game: { select: gameSelect } } } },
     });

@@ -809,12 +809,12 @@ export const HELP_ARTICLES: HelpArticle[] = [
     slug: 'plans-and-billing',
     title: 'Plans and billing',
     category: 'account',
-    summary: 'The platform is free. Stripe is only for your own entry fees and tickets.',
+    summary: 'Starter is one active tournament. Premier lifts the cap and adds editors.',
     keywords: ['premier', 'plan', 'billing', 'invoice', 'subscription', 'cancel', 'free'],
     sections: [
       {
-        heading: 'Everything is free',
-        body: ['Every organizer feature is included: all formats, the full game catalog, auto-scheduler, referees, CSV/PDF, custom branding, embeds, TV mode, communities, events and the cricket scoreboard. There is no Premier paywall and no ads.'],
+        heading: 'Starter and Premier',
+        body: ['Starter is free for one active tournament: a tournament that had a result in the last 30 days. Premier is $9/month (or $90/year) for unlimited active tournaments, co-admins and score editors. Public pages stay ad-free on both plans.'],
       },
       {
         heading: 'Entry fees and tickets',

@@ -24,6 +24,8 @@ enum TournamentFormat {
   TIME_TRIAL
   SINGLE_RACE
   GRAND_PRIX
+  GAUNTLET
+  CUSTOM_BRACKET
 }
 
 enum MatchStatus {
@@ -175,6 +177,7 @@ model User {
   communityFollows CommunityFollow[]
   communityAnnouncements CommunityAnnouncement[]
   ownedEvents   Event[]           @relation("OwnedEvents")
+  ownedCircuits Circuit[]         @relation("OwnedCircuits")
   eventAdminOf  EventAdmin[]
   eventOrders   EventOrder[]
   templates     TournamentTemplate[]
@@ -327,6 +330,8 @@ model Community {
   rankings      Ranking[]
   templates     TournamentTemplate[]
   webhooks      Webhook[]
+  circuits      Circuit[]
+  customDomain  String?                 @unique
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
@@ -692,6 +697,25 @@ model Game {
   rankings    Ranking[]
 }
 
+model Circuit {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  name        String
+  description String?
+  ownerId     String
+  owner       User         @relation("OwnedCircuits", fields: [ownerId], references: [id])
+  communityId String?
+  community   Community?   @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  isPublic    Boolean      @default(true)
+  points      Json         @default("[25,18,15,12,10,8,6,4,2,1]")
+  tournaments Tournament[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([ownerId])
+  @@index([communityId])
+}
+
 model Tournament {
   id              String            @id @default(cuid())
   name            String
@@ -724,6 +748,8 @@ model Tournament {
   community       Community?        @relation(fields: [communityId], references: [id], onDelete: SetNull)
   eventId         String?
   event           Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  circuitId       String?
+  circuit         Circuit?          @relation(fields: [circuitId], references: [id], onDelete: SetNull)
   rankingId       String?
   ranking         Ranking?          @relation(fields: [rankingId], references: [id], onDelete: SetNull)
   startedAt       DateTime?
@@ -751,6 +777,7 @@ model Tournament {
   @@index([status])
   @@index([communityId])
   @@index([eventId])
+  @@index([circuitId])
   @@index([isPublic, status, startAt])
 }
 
@@ -886,6 +913,8 @@ model Match {
   scheduledAt        DateTime?
   durationMinutes    Int?
   station            String?
+  lobbyCode          String?
+  lobbyUrl           String?
   stationId          String?
   stationRef         Station?    @relation(fields: [stationId], references: [id], onDelete: SetNull)
   refereeId          String?

@@ -43,6 +43,8 @@ export type ScheduleConfig = {
    */
   respectRounds?: boolean;
   stageOrder?: 'groups-first';
+  /** Lunch, ceremonies, venue closures. Slots that overlap these are not used. */
+  blackouts?: ScheduleDayWindow[];
 };
 
 export type SchedulableMatch = {
@@ -73,7 +75,8 @@ export type ScheduleConflictKind =
   | 'TEAM_REST'
   | 'STATION_OVERLAP'
   | 'REFEREE_OVERLAP'
-  | 'DEPENDENCY_ORDER';
+  | 'DEPENDENCY_ORDER'
+  | 'BLACKOUT';
 
 export type ScheduleConflict = {
   kind: ScheduleConflictKind;
@@ -193,7 +196,7 @@ export function dateKeyInZone(iso: string | number | Date, timeZone: string): st
 export function buildTimeSlots(
   config: Pick<
     ScheduleConfig,
-    'days' | 'slotMinutes' | 'breakMinutes' | 'timezone'
+    'days' | 'slotMinutes' | 'breakMinutes' | 'timezone' | 'blackouts'
   >,
 ): TimeSlot[] {
   const slotMs = Math.max(1, config.slotMinutes) * MINUTE;
@@ -212,8 +215,32 @@ export function buildTimeSlots(
       slots.push({ date: day.date, startMs: s, endMs: s + slotMs });
     }
   }
-  slots.sort((a, b) => a.startMs - b.startMs);
-  return slots;
+  const blocked = blackoutIntervals(config.blackouts, config.timezone);
+  const open = blocked.length
+    ? slots.filter((slot) => !rangesOverlap(slot.startMs, slot.endMs, blocked))
+    : slots;
+  open.sort((a, b) => a.startMs - b.startMs);
+  return open;
+}
+
+export function blackoutIntervals(
+  blackouts: ScheduleDayWindow[] | undefined,
+  timezone: string,
+): { startMs: number; endMs: number }[] {
+  return (blackouts ?? [])
+    .map((b) => ({
+      startMs: zonedTimeToUtcMs(b.date, b.startTime, timezone),
+      endMs: zonedTimeToUtcMs(b.date, b.endTime, timezone),
+    }))
+    .filter((b) => b.endMs > b.startMs);
+}
+
+function rangesOverlap(
+  startMs: number,
+  endMs: number,
+  ranges: { startMs: number; endMs: number }[],
+) {
+  return ranges.some((b) => overlaps(startMs, endMs, b.startMs, b.endMs));
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +548,7 @@ export function generateSchedule(
       };
     }),
     restMs / MINUTE,
+    blackoutIntervals(config.blackouts, config.timezone),
   );
 
   return { assignments, unscheduled, conflicts };
@@ -533,6 +561,7 @@ export function generateSchedule(
 export function detectConflicts(
   scheduled: ScheduledMatchLike[],
   restMinutes = 0,
+  blackouts: { startMs: number; endMs: number }[] = [],
 ): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = [];
   const restMs = Math.max(0, restMinutes) * MINUTE;
@@ -592,6 +621,16 @@ export function detectConflicts(
             });
           }
         }
+      }
+    }
+    for (const b of blackouts) {
+      if (overlaps(a.startMs, a.endMs, b.startMs, b.endMs)) {
+        conflicts.push({
+          kind: 'BLACKOUT',
+          matchIds: [a.matchId],
+          message: 'Match sits inside a blackout window',
+        });
+        break;
       }
     }
     for (const f of a.feederMatchIds ?? []) {

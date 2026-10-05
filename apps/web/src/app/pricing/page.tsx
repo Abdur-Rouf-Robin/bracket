@@ -8,13 +8,13 @@ import { PricingPlans } from '@/components/marketing/pricing-plans';
 export const metadata: Metadata = {
   title: 'Pricing',
   description:
-    'Bracket is free forever. Every format, game catalog, scheduler, export and cricket scoreboard is included — no subscription.',
+    'Starter is free for one active tournament. Premier is $9/month for unlimited active tournaments, co-admins and score editors.',
 };
 
 const PRICING_FAQ = [
   {
-    q: 'Is it really all free?',
-    a: 'Yes. Every organizer feature is included: all formats, the full game catalog, auto-scheduler, referees, CSV/PDF, custom branding, embeds, TV mode, communities, events and the cricket scoreboard. There is no Premier paywall.',
+    q: 'What is an active tournament?',
+    a: 'A tournament is active if a match result was saved in the last 30 days. Drafts and untouched events do not count. Starter includes one. Premier removes the cap.',
   },
   {
     q: 'Are there ads?',
@@ -26,11 +26,11 @@ const PRICING_FAQ = [
   },
   {
     q: 'How do paid registrations work?',
-    a: 'If you want to charge an entry fee or event ticket, connect your own Stripe account. Payments go to you. Bracket does not sell a platform subscription.',
+    a: 'Entry fees and event tickets still go to your own Stripe account. Premier is a separate platform subscription for unlimited active tournaments and extra organizers.',
   },
   {
     q: 'Is there a participant limit?',
-    a: 'A single tournament can hold up to 4096 participants. Create as many tournaments, communities and events as you need.',
+    a: 'A single tournament can hold up to 4096 participants. Starter can have one of them active at a time. Drafts with no results do not count.',
   },
 ];
 
@@ -40,8 +40,8 @@ export default function PricingPage() {
       <section className="container-page pt-16 pb-6">
         <SectionHeading
           eyebrow="Pricing"
-          title="Everything is free"
-          description="Score7-simple to run, Challonge-deep in options — without locking any of it behind a subscription."
+          title="Start with one live event"
+          description="Starter is free for one active tournament. Premier is $9 a month when you are running more than one, or when someone else needs to enter scores."
         />
       </section>
       <section className="container-page pb-16">
@@ -50,7 +50,7 @@ export default function PricingPage() {
 
       <section className="border-t border-[var(--color-line)] bg-[var(--color-surface)]/30 py-16">
         <div className="container-page">
-          <SectionHeading title="What you get" description="The full organizer toolkit on one free plan." />
+          <SectionHeading title="What you get" description="The same organizer toolkit on both plans. Premier lifts the active-tournament cap and adds editors." />
           <div className="mx-auto mt-10 max-w-4xl">
             <FeatureTable compact />
             <p className="mt-4 text-center text-sm text-[var(--color-muted)]">

@@ -41,6 +41,15 @@ export const FEATURE_SECTIONS: FeatureSection[] = [
         label: 'Participants per tournament',
         included: `${PLANS.FREE.limits.maxParticipants}`,
       },
+      {
+        label: 'Active tournaments',
+        hint: 'A tournament counts as active for 30 days after a result is saved.',
+        included: '1 on Starter · unlimited on Premier',
+      },
+      {
+        label: 'Co-admins and score editors',
+        included: 'Premier',
+      },
     ],
   },
   {

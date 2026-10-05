@@ -59,6 +59,11 @@ export class CommunitiesController {
     return this.communities.slugAvailable(slug, excludeId || undefined);
   }
 
+  @Get('by-domain')
+  byDomain(@Query('host') host = '') {
+    return this.communities.getByDomain(host);
+  }
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post()

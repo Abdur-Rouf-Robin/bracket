@@ -23,8 +23,9 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { AccessService } from '../common/access.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { buildShareCardPayload, createDrawSeed, hashSeed, teamRosterSchema, tournamentSettingsSchema } from '@bracket/shared';
+import { PLANS, buildShareCardPayload, createDrawSeed, hashSeed, teamRosterSchema, tournamentSettingsSchema } from '@bracket/shared';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ShareImagesService } from '../share-images/share-images.service';
 import { TournamentsService } from './tournaments.service';
@@ -55,6 +56,7 @@ const announcementSchema = z.object({
 
 const shareAdminSchema = z.object({
   email: z.string().email(),
+  role: z.enum(['ADMIN', 'EDITOR']).default('EDITOR'),
 });
 
 const setPoolColorSchema = z.object({
@@ -71,6 +73,7 @@ export class TournamentExtrasController {
     private readonly realtime: RealtimeGateway,
     private readonly shareImages: ShareImagesService,
     private readonly tournaments: TournamentsService,
+    private readonly access: AccessService,
   ) {}
 
   private async requireManage(tournamentId: string, userId: string) {
@@ -83,6 +86,19 @@ export class TournamentExtrasController {
       t.createdById === userId ||
       t.admins.some((a) => a.userId === userId);
     if (!isAdmin) throw new BadRequestException('Not allowed');
+    return t;
+  }
+
+  /** Score editors can report results. They cannot redraw, shuffle, or invite staff. */
+  private async requireConfigure(tournamentId: string, userId: string) {
+    const t = await this.requireManage(tournamentId, userId);
+    if (t.createdById === userId) return t;
+    const row = t.admins.find((a) => a.userId === userId);
+    if (row?.role === 'EDITOR') {
+      throw new BadRequestException(
+        'Editors can enter scores. Only the owner or a co-admin can change the structure.',
+      );
+    }
     return t;
   }
 
@@ -112,7 +128,7 @@ export class TournamentExtrasController {
     @Body(new ZodValidationPipe(shuffleGroupsSchema))
     body: z.infer<typeof shuffleGroupsSchema>,
   ) {
-    await this.requireManage(id, user.id);
+    await this.requireConfigure(id, user.id);
     const result = await this.shuffleGroups(id, user, body);
     const teams = await this.prisma.team.findMany({
       where: { tournamentId: id },
@@ -144,7 +160,7 @@ export class TournamentExtrasController {
     @Body(new ZodValidationPipe(shuffleGroupsSchema))
     body: z.infer<typeof shuffleGroupsSchema>,
   ) {
-    await this.requireManage(id, user.id);
+    await this.requireConfigure(id, user.id);
     const tournament = await this.prisma.tournament.findUnique({
       where: { id },
     });
@@ -288,7 +304,7 @@ export class TournamentExtrasController {
     @Body(new ZodValidationPipe(colorDraftSchema))
     body: z.infer<typeof colorDraftSchema>,
   ) {
-    await this.requireManage(id, user.id);
+    await this.requireConfigure(id, user.id);
     const draft = colorPoolDraft({
       pools: body.pools,
       teamCount: body.teamCount,
@@ -426,9 +442,15 @@ export class TournamentExtrasController {
     @Body(new ZodValidationPipe(shareAdminSchema))
     body: z.infer<typeof shareAdminSchema>,
   ) {
-    const t = await this.requireManage(id, user.id);
+    const t = await this.requireConfigure(id, user.id);
     if (t.createdById !== user.id) {
       throw new BadRequestException('Only the owner can share admin access');
+    }
+    const plan = await this.access.userPlan(user.id);
+    if (!PLANS[plan].limits.coAdmins) {
+      throw new BadRequestException(
+        'Starter includes one organizer. Upgrade to Premier to add a co-admin or a score editor.',
+      );
     }
     const target = await this.prisma.user.findUnique({
       where: { email: body.email.toLowerCase() },
@@ -438,8 +460,8 @@ export class TournamentExtrasController {
       where: {
         tournamentId_userId: { tournamentId: id, userId: target.id },
       },
-      create: { tournamentId: id, userId: target.id, role: 'ADMIN' },
-      update: {},
+      create: { tournamentId: id, userId: target.id, role: body.role },
+      update: { role: body.role },
       include: { user: { select: { id: true, email: true, name: true } } },
     });
   }

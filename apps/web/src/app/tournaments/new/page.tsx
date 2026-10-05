@@ -37,13 +37,17 @@ type QuickFormat =
   | 'SINGLE_ELIMINATION'
   | 'DOUBLE_ELIMINATION'
   | 'ROUND_ROBIN'
-  | 'SWISS';
+  | 'SWISS'
+  | 'GAUNTLET'
+  | 'CUSTOM_BRACKET';
 
 const QUICK_FORMATS: { value: QuickFormat; label: string; hint: string }[] = [
   { value: 'SINGLE_ELIMINATION', label: 'Single elim', hint: 'Lose once and you are out' },
   { value: 'DOUBLE_ELIMINATION', label: 'Double elim', hint: 'Must lose twice' },
   { value: 'ROUND_ROBIN', label: 'Round robin', hint: 'Everyone plays everyone' },
   { value: 'SWISS', label: 'Swiss', hint: 'Paired by record each round' },
+  { value: 'GAUNTLET', label: 'Gauntlet', hint: 'Winner stays, next seed challenges' },
+  { value: 'CUSTOM_BRACKET', label: 'Custom bracket', hint: 'Your list order is the bracket' },
 ];
 
 const SINGLE_STAGE_VALUES = new Set(SINGLE_STAGE_OPTIONS.map((o) => o.value));
@@ -126,13 +130,17 @@ export default function NewTournamentPage() {
   // Community / template support: ?community=<id> attaches the new tournament,
   // ?template=<id> prefills the wizard from a saved template payload.
   const [communityId, setCommunityId] = useState<string | null>(null);
+  const [circuitId, setCircuitId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const sp = new URLSearchParams(window.location.search);
     setCommunityId(sp.get('community'));
+    setCircuitId(sp.get('circuit'));
     setTemplateId(sp.get('template'));
+    const game = sp.get('game');
+    if (game) setGameId(game);
     const format = sp.get('format');
     if (format === 'GROUPS_KNOCKOUT') {
       setSettings((s) => ({ ...s, stageMode: 'TWO_STAGE' }));
@@ -148,7 +156,9 @@ export default function NewTournamentPage() {
         single === 'SINGLE_ELIMINATION' ||
         single === 'DOUBLE_ELIMINATION' ||
         single === 'ROUND_ROBIN' ||
-        single === 'SWISS'
+        single === 'SWISS' ||
+        single === 'GAUNTLET' ||
+        single === 'CUSTOM_BRACKET'
       ) {
         setQuickFormat(single);
       } else {
@@ -356,6 +366,21 @@ export default function NewTournamentPage() {
             );
           }
         }
+        if (circuitId) {
+          try {
+            await api(`/circuits/${circuitId}/tournaments`, {
+              method: 'POST',
+              token,
+              body: JSON.stringify({ tournamentId: t.id }),
+            });
+          } catch (err) {
+            setError(
+              `Tournament created, but could not add it to the circuit: ${
+                err instanceof Error ? err.message : 'unknown error'
+              }`,
+            );
+          }
+        }
         if (templateId) {
           void api(`/templates/${templateId}/use`, { method: 'POST', token }).catch(() => undefined);
         }
@@ -517,6 +542,21 @@ export default function NewTournamentPage() {
         } catch (err) {
           setError(
             `Tournament created, but could not attach to community: ${
+              err instanceof Error ? err.message : 'unknown error'
+            }`,
+          );
+        }
+      }
+      if (circuitId) {
+        try {
+          await api(`/circuits/${circuitId}/tournaments`, {
+            method: 'POST',
+            token,
+            body: JSON.stringify({ tournamentId: created.id }),
+          });
+        } catch (err) {
+          setError(
+            `Tournament created, but could not add it to the circuit: ${
               err instanceof Error ? err.message : 'unknown error'
             }`,
           );
@@ -996,6 +1036,24 @@ export default function NewTournamentPage() {
                     </button>
                   ))}
                 </div>
+                {(settings.singleStageFormat === 'ROUND_ROBIN') && (
+                  <label className="mt-4 flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={(settings.meetingsPerPair ?? 1) >= 2}
+                      onChange={(e) =>
+                        patchSettings({ meetingsPerPair: e.target.checked ? 2 : 1 })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium">Home and away</span>
+                      <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+                        Each pair plays twice. The return leg swaps home and away.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             )}
 
@@ -1043,9 +1101,17 @@ export default function NewTournamentPage() {
                         })
                       }
                     />
-                    <p className="mt-1 text-[10px] text-[var(--color-muted)]">
-                      How many times each pair plays in groups
-                    </p>
+                    <label className="mt-2 flex items-start gap-2 text-xs text-[var(--color-muted)]">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={(settings.meetingsPerPair ?? 1) >= 2}
+                        onChange={(e) =>
+                          patchSettings({ meetingsPerPair: e.target.checked ? 2 : 1 })
+                        }
+                      />
+                      <span>Home and away — the return leg swaps home and away.</span>
+                    </label>
                   </div>
                 </div>
                 <div>

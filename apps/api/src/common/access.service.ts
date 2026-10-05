@@ -166,10 +166,16 @@ export class AccessService {
   }
 
   /**
-   * Every organizer gets the full feature set. Plans stay in the schema for
-   * compatibility, but nothing is paywalled.
+   * Premier while the stored plan is PREMIER and any expiry is still in the future.
+   * Everyone else is Starter (one active tournament, no co-admins).
    */
-  async userPlan(_userId: string): Promise<'FREE' | 'PREMIER'> {
+  async userPlan(userId: string): Promise<'FREE' | 'PREMIER'> {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true, planExpiresAt: true },
+    });
+    if (!u || u.plan !== 'PREMIER') return 'FREE';
+    if (u.planExpiresAt && u.planExpiresAt.getTime() < Date.now()) return 'FREE';
     return 'PREMIER';
   }
 }

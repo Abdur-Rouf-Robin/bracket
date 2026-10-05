@@ -13,7 +13,7 @@ const VALUES = [
   { icon: Rocket, title: 'Fast by default', body: 'From names to a published bracket in minutes. Every screen is designed to be run from a phone at a noisy venue.' },
   { icon: ShieldCheck, title: 'Rules done right', body: 'Seeding, byes, tiebreakers, best thirds, Buchholz, bracket resets — implemented and tested against the official rulebooks.' },
   { icon: Globe2, title: 'Open to viewers', body: 'Spectators, parents and players never need an account. Public pages, embeds and TV mode just work.' },
-  { icon: HeartHandshake, title: 'Free forever', body: 'Every organizer feature is included. No ads, no participant paywall, no Premier subscription.' },
+  { icon: HeartHandshake, title: 'Free to start', body: 'Starter covers one active tournament with every format. Viewers never pay, and public pages stay ad-free.' },
 ];
 
 export default function AboutPage() {

@@ -43,6 +43,7 @@ export function ManageCommunitySettings({
   const [logoUrl, setLogoUrl] = useState(community.logoUrl ?? '');
   const [bannerUrl, setBannerUrl] = useState(community.bannerUrl ?? '');
   const [isPublic, setIsPublic] = useState(community.isPublic);
+  const [customDomain, setCustomDomain] = useState(community.customDomain ?? '');
 
   const [slugToCheck, setSlugToCheck] = useState('');
   useEffect(() => {
@@ -86,6 +87,7 @@ export function ManageCommunitySettings({
           logoUrl: logoUrl.trim() || null,
           bannerUrl: bannerUrl.trim() || null,
           isPublic,
+          customDomain: customDomain.trim() || null,
         }),
       });
     },
@@ -269,6 +271,19 @@ export function ManageCommunitySettings({
             </span>
           </span>
         </label>
+        <div>
+          <Label htmlFor="custom-domain">Custom domain</Label>
+          <Input
+            id="custom-domain"
+            value={customDomain}
+            onChange={(e) => setCustomDomain(e.target.value)}
+            placeholder="club.example.com"
+            className="mt-1"
+          />
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            Point this hostname at Bracket. Visitors to the bare domain land on this community.
+          </p>
+        </div>
       </section>
 
       <div className="flex justify-end">

@@ -37,6 +37,7 @@ export type Community = {
   logoUrl?: string | null;
   bannerUrl?: string | null;
   websiteUrl?: string | null;
+  customDomain?: string | null;
   location?: string | null;
   countryCode?: string | null;
   audience: string[];

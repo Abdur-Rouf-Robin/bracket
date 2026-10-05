@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 import { Github, Globe, Trophy, Twitter, Youtube } from 'lucide-react';
+import { useLocale, LOCALES, type Locale } from '@/lib/locale';
 import { cn } from '@/lib/utils';
 
 const COLUMNS: { title: string; links: { label: string; href: string; external?: boolean }[] }[] = [
@@ -41,17 +44,18 @@ const COLUMNS: { title: string; links: { label: string; href: string; external?:
   },
 ];
 
-const LANGUAGES = [
-  { code: 'en', label: 'English', enabled: true },
-  { code: 'es', label: 'Español', enabled: false },
-  { code: 'fr', label: 'Français', enabled: false },
-  { code: 'de', label: 'Deutsch', enabled: false },
-  { code: 'pt', label: 'Português', enabled: false },
-  { code: 'bn', label: 'বাংলা', enabled: false },
+const LANGUAGES: { code: Locale; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'fr', label: 'Français' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'pt', label: 'Português' },
+  { code: 'bn', label: 'বাংলা' },
 ];
 
 export function SiteFooter({ className }: { className?: string }) {
   const year = new Date().getFullYear();
+  const { locale, setLocale, t } = useLocale();
   return (
     <footer
       className={cn(
@@ -69,8 +73,7 @@ export function SiteFooter({ className }: { className?: string }) {
               Bracket
             </Link>
             <p className="mt-3 max-w-xs text-sm text-[var(--color-muted)]">
-              Run any tournament. Brackets, schedules and live results for clubs, leagues,
-              esports and everything in between.
+              {t('footer.blurb')}
             </p>
             <div className="mt-4 flex items-center gap-1">
               <a
@@ -130,14 +133,17 @@ export function SiteFooter({ className }: { className?: string }) {
             <Globe className="size-3.5" aria-hidden />
             <span className="sr-only">Language</span>
             <select
-              defaultValue="en"
+              value={locale}
               aria-label="Language"
+              onChange={(e) => {
+                const next = e.target.value;
+                if (LOCALES.includes(next as Locale)) setLocale(next as Locale);
+              }}
               className="h-8 rounded-md border border-[var(--color-line)] bg-[var(--color-surface)] px-2 text-xs text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]/50"
             >
               {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code} disabled={!l.enabled}>
+                <option key={l.code} value={l.code}>
                   {l.label}
-                  {!l.enabled ? ' (soon)' : ''}
                 </option>
               ))}
             </select>

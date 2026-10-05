@@ -13,6 +13,7 @@ import {
   Code2,
   Compass,
   CreditCard,
+  Gamepad2,
   Goal,
   LayoutDashboard,
   LogOut,
@@ -47,6 +48,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { NotificationBell } from '@/components/inbox/notification-bell';
 import { MustChangePasswordBanner } from '@/components/account/must-change-password-banner';
 import { useAuth } from '@/lib/auth';
+import { useLocale } from '@/lib/locale';
 import { cn } from '@/lib/utils';
 
 type NavLink = { label: string; href: string; description?: string; icon?: ReactNode };
@@ -58,14 +60,6 @@ export const CREATE_LINKS: NavLink[] = [
   { label: 'Event', href: '/events/new', description: 'Multi-tournament events & tickets', icon: <CalendarDays className="size-4" /> },
   { label: 'Quick bracket', href: '/bracket-generator', description: 'No account needed', icon: <Zap className="size-4" /> },
   { label: 'Cricket scoreboard', href: '/sports/cricket/free/new', description: 'Ball-by-ball, no tournament needed', icon: <ClipboardList className="size-4" /> },
-];
-
-export const DISCOVER_LINKS: NavLink[] = [
-  { label: 'Browse tournaments', href: '/browse', icon: <Compass className="size-4" /> },
-  { label: 'Search', href: '/search', icon: <Search className="size-4" /> },
-  { label: 'Communities', href: '/communities', icon: <Users className="size-4" /> },
-  { label: 'Events', href: '/events', icon: <CalendarDays className="size-4" /> },
-  { label: 'Cricket', href: '/sports/cricket', icon: <CircleDot className="size-4" /> },
 ];
 
 export const SPORTS_LINKS: NavLink[] = [
@@ -83,17 +77,25 @@ export const FORMAT_LINKS: NavLink[] = [
   { label: 'Free for all', href: '/formats/free-for-all' },
   { label: 'Leaderboard', href: '/formats/leaderboard' },
   { label: 'Racing', href: '/formats/racing' },
+  { label: 'Gauntlet', href: '/formats/gauntlet' },
+  { label: 'Custom bracket', href: '/formats/custom-bracket' },
+];
+
+const FIND_LINKS: NavLink[] = [
+  { label: 'Browse tournaments', href: '/browse', icon: <Compass className="size-4" /> },
+  { label: 'Search', href: '/search', icon: <Search className="size-4" /> },
+  { label: 'Communities', href: '/communities', icon: <Users className="size-4" /> },
+  { label: 'Events', href: '/events', icon: <CalendarDays className="size-4" /> },
+  { label: 'Circuits', href: '/circuits', icon: <Trophy className="size-4" /> },
+  { label: 'Games', href: '/games', icon: <Gamepad2 className="size-4" /> },
 ];
 
 const NAV_GROUPS: NavGroup[] = [
   { label: 'Create', items: CREATE_LINKS },
-  { label: 'Discover', items: DISCOVER_LINKS },
-  { label: 'Sports', items: SPORTS_LINKS },
-  { label: 'Formats', items: FORMAT_LINKS },
 ];
 
 const TOP_LINKS: NavLink[] = [
-  { label: 'Features', href: '/features' },
+  { label: 'Find', href: '/browse' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'Help', href: '/help' },
 ];
@@ -229,6 +231,7 @@ function UserMenu() {
 }
 
 function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boolean }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { logout } = useAuth();
@@ -278,8 +281,8 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
           <GlobalSearch />
           {!loggedIn && (
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="secondary" asChild><Link href="/login">Sign in</Link></Button>
-              <Button asChild><Link href="/register">Get started</Link></Button>
+              <Button variant="secondary" asChild><Link href="/login">{t('nav.signin')}</Link></Button>
+              <Button asChild><Link href="/register">{t('nav.start')}</Link></Button>
             </div>
           )}
           {loggedIn &&
@@ -295,14 +298,14 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
               ...(isAdmin ? [{ label: 'Admin', href: '/admin', icon: <Shield className="size-4" /> }] : []),
             ])}
           {section('Create', CREATE_LINKS)}
-          {section('Discover', DISCOVER_LINKS)}
-          {section('Sports', SPORTS_LINKS)}
-          {section('Formats', FORMAT_LINKS)}
+          {section('Find', FIND_LINKS)}
           {section('More', [
-            { label: 'Features', href: '/features', icon: <Sparkles className="size-4" /> },
             { label: 'Pricing', href: '/pricing', icon: <CreditCard className="size-4" /> },
             { label: 'Help center', href: '/help', icon: <BookOpen className="size-4" /> },
+            { label: 'Features', href: '/features', icon: <Sparkles className="size-4" /> },
             { label: 'About', href: '/about', icon: <Building2 className="size-4" /> },
+            ...SPORTS_LINKS,
+            ...FORMAT_LINKS,
           ])}
           <div className="flex items-center justify-between border-t border-[var(--color-line)] pt-4">
             <span className="text-sm text-[var(--color-muted)]">Theme</span>
@@ -321,6 +324,7 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
 
 export function SiteHeader({ className }: { className?: string }) {
   const { user } = useAuth();
+  const { t } = useLocale();
   const pathname = usePathname() ?? '';
   const [mounted, setMounted] = useState(false);
 
@@ -353,10 +357,7 @@ export function SiteHeader({ className }: { className?: string }) {
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-0.5 lg:flex">
-          <NavDropdown group={NAV_GROUPS[0]!} />
-          <NavDropdown group={NAV_GROUPS[1]!} />
-          <NavDropdown group={NAV_GROUPS[2]!} />
-          <NavDropdown group={NAV_GROUPS[3]!} wide />
+          <NavDropdown group={{ ...NAV_GROUPS[0]!, label: t('nav.create') }} />
           {TOP_LINKS.map((l) => {
             const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (
@@ -368,7 +369,7 @@ export function SiteHeader({ className }: { className?: string }) {
                   active ? 'text-[var(--color-ink)]' : 'text-[var(--color-muted)]',
                 )}
               >
-                {l.label}
+                {l.label === 'Find' ? t('nav.find') : l.label === 'Pricing' ? t('nav.pricing') : l.label === 'Help' ? t('nav.help') : l.label}
               </Link>
             );
           })}
@@ -391,10 +392,10 @@ export function SiteHeader({ className }: { className?: string }) {
           ) : (
             <>
               <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
-                <Link href="/login">Sign in</Link>
+                <Link href="/login">{t('nav.signin')}</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/register">Get started</Link>
+                <Link href="/register">{t('nav.start')}</Link>
               </Button>
             </>
           )}

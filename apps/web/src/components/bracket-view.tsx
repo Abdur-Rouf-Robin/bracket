@@ -53,6 +53,8 @@ const FORMAT_TITLES: Record<string, string> = {
   TIME_TRIAL: 'Time Trial Board',
   SINGLE_RACE: 'Race Results',
   GRAND_PRIX: 'Grand Prix Championship',
+  GAUNTLET: 'Gauntlet',
+  CUSTOM_BRACKET: 'Custom bracket',
 };
 
 function bracketNames(settings: TournamentSettings | undefined) {
@@ -125,7 +127,9 @@ export function BracketView({ tournament }: { tournament: Tournament }) {
       )}
 
       {(format === 'SINGLE_ELIMINATION' ||
-        format === 'DOUBLE_ELIMINATION') && (
+        format === 'DOUBLE_ELIMINATION' ||
+        format === 'GAUNTLET' ||
+        format === 'CUSTOM_BRACKET') && (
         <EliminationSection tournament={tournament} matches={tournament.matches} />
       )}
     </div>

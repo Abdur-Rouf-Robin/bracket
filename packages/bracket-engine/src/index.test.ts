@@ -6,7 +6,9 @@ import {
   computeStandings,
   expandTwoLeggedGroup,
   expandTwoLeggedKnockout,
+  generateCustomBracket,
   generateDoubleElimination,
+  generateGauntlet,
   generateRoundRobin,
   generateSingleElimination,
   generateGroupsKnockout,
@@ -175,6 +177,27 @@ describe('generateGroupsKnockout', () => {
     expect(result.groups).toHaveLength(2);
     expect(result.matches.some((m) => m.bracketSide === 'GROUP')).toBe(true);
     expect(result.matches.some((m) => m.key.startsWith('gk-'))).toBe(true);
+  });
+});
+
+describe('generateGauntlet', () => {
+  it('keeps the winner and brings on the next seed', () => {
+    const matches = generateGauntlet(teams(4));
+    expect(matches).toHaveLength(3);
+    expect(matches[0]).toMatchObject({ homeTeamId: 't1', awayTeamId: 't2', nextMatchSlot: 'home' });
+    expect(matches[1]).toMatchObject({ homeTeamId: null, awayTeamId: 't3' });
+    expect(matches[2]).toMatchObject({ awayTeamId: 't4', nextMatchKey: null, bracketSide: 'FINAL' });
+  });
+});
+
+describe('generateCustomBracket', () => {
+  it('pairs the list in order', () => {
+    const matches = generateCustomBracket(teams(4));
+    const round1 = matches.filter((m) => m.round === 1);
+    expect(round1.map((m) => [m.homeTeamId, m.awayTeamId])).toEqual([
+      ['t1', 't2'],
+      ['t3', 't4'],
+    ]);
   });
 });
 

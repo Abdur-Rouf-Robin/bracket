@@ -10,6 +10,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { StandingsModule } from './standings/standings.module';
 import { JobsModule } from './jobs/jobs.module';
 import { EventsModule } from './events/events.module';
+import { CircuitsModule } from './circuits/circuits.module';
 import { GamesModule } from './games/games.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
@@ -65,6 +66,7 @@ const redisEnabled = process.env.REDIS_ENABLED === 'true';
     MatchesModule,
     CricketModule,
     EventsModule,
+    CircuitsModule,
     GamesModule,
     AdminModule,
     UploadsModule,

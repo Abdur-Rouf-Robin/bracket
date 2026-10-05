@@ -8,7 +8,9 @@ export type FormatSlug =
   | 'groups-knockout'
   | 'free-for-all'
   | 'leaderboard'
-  | 'racing';
+  | 'racing'
+  | 'gauntlet'
+  | 'custom-bracket';
 
 export type FormatPage = {
   slug: FormatSlug;
@@ -245,6 +247,64 @@ export const FORMAT_PAGES: FormatPage[] = [
       { q: 'Can I change the points table?', a: 'Yes, the F1 default can be edited per tournament.' },
     ],
     keywords: ['time trial results', 'grand prix points', 'race series standings'],
+  },
+  {
+    slug: 'gauntlet',
+    preview: 'SINGLE_ELIMINATION',
+    apiFormat: 'GAUNTLET',
+    name: 'Gauntlet',
+    tagline: 'Winner stays. The next seed challenges.',
+    intro:
+      'A king-of-the-hill bracket. Seed 1 plays seed 2. The winner stays on and faces seed 3, then seed 4, until the list is done. The champion is whoever wins the last challenge.',
+    howItWorks: [
+      'Participants are ordered by seed.',
+      'Each match is the current champion against the next challenger.',
+      'A loss ends that challenger’s run. The winner keeps the court.',
+    ],
+    whenToUse: [
+      'Arcade and fighting-game sessions.',
+      'One court or one station all day.',
+      'Small fields where a full bracket would be too many matches.',
+    ],
+    math: {
+      formula: 'n − 1',
+      explanation: 'Every participant except the opening champion gets one challenge, so the event is n − 1 matches.',
+      example: '8 players → 7 matches, all on the same station.',
+    },
+    faq: [
+      { q: 'Who starts as champion?', a: 'The first seed. Put your defending player at the top of the list.' },
+      { q: 'Can a challenger become champion?', a: 'Yes. If they win, they stay on for the next seed.' },
+    ],
+    keywords: ['gauntlet tournament', 'winner stays', 'king of the hill bracket'],
+  },
+  {
+    slug: 'custom-bracket',
+    preview: 'SINGLE_ELIMINATION',
+    apiFormat: 'CUSTOM_BRACKET',
+    name: 'Custom bracket',
+    tagline: 'Your list order is the bracket.',
+    intro:
+      'Pair the field yourself by the order you enter names. 1 plays 2, 3 plays 4, and winners meet in that same order. No standard seeding shuffle.',
+    howItWorks: [
+      'Enter participants in the exact order you want them placed.',
+      'Round one is adjacent pairs from that list.',
+      'Later rounds follow the winners, the same way a knockout tree does.',
+    ],
+    whenToUse: [
+      'You already know the matchups.',
+      'A published draw that should not be reseeded.',
+      'Exhibition brackets and invite fields.',
+    ],
+    math: {
+      formula: 'n − 1',
+      explanation: 'It is still a knockout, so one match is played for every participant except the champion. Byes fill the tree when the field is not a power of two.',
+      example: '8 names in order → four quarter-finals exactly as listed.',
+    },
+    faq: [
+      { q: 'How do I set a specific final?', a: 'Put the two sides’ paths next to each other in the list. Adjacent pairs meet first.' },
+      { q: 'Is this a freeform match editor?', a: 'The opening pairings follow your list. Winners still advance automatically.' },
+    ],
+    keywords: ['custom bracket', 'manual seeding', 'set your own matchups'],
   },
 ];
 

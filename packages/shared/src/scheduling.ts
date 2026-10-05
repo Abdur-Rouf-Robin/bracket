@@ -68,6 +68,8 @@ export const scheduleConfigSchema = z.object({
   stageOrder: z.enum(['groups-first']).default('groups-first'),
   useReferees: z.boolean().default(true),
   stationIds: z.array(z.string()).optional(),
+  /** Unavailable windows (lunch, ceremonies, closures). Same shape as days. */
+  blackouts: z.array(scheduleDaySchema).max(60).default([]),
 });
 
 export type ScheduleConfigInput = z.infer<typeof scheduleConfigSchema>;
@@ -82,6 +84,7 @@ export const DEFAULT_SCHEDULE_CONFIG: ScheduleConfigInput = {
   respectRounds: true,
   stageOrder: 'groups-first',
   useReferees: true,
+  blackouts: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -127,6 +130,10 @@ export const matchSlotSchema = z.object({
   refereeId: z.string().optional().nullable(),
   /** Legacy free-text station label (kept in sync with stationRef.name). */
   station: z.string().trim().max(80).optional().nullable(),
+  lobbyCode: z.string().trim().max(80).optional().nullable(),
+  lobbyUrl: z.string().trim().max(500).optional().nullable(),
+  /** When true, return clashes for the proposed slot and do not write. */
+  preview: z.boolean().optional(),
 });
 export type MatchSlotInput = z.infer<typeof matchSlotSchema>;
 
@@ -153,7 +160,8 @@ export type ScheduleConflictKind =
   | 'TEAM_REST'
   | 'STATION_OVERLAP'
   | 'REFEREE_OVERLAP'
-  | 'DEPENDENCY_ORDER';
+  | 'DEPENDENCY_ORDER'
+  | 'BLACKOUT';
 
 export type ScheduleConflictDto = {
   kind: ScheduleConflictKind;

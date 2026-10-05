@@ -39,6 +39,8 @@ export const TournamentFormat = {
   TIME_TRIAL: 'TIME_TRIAL',
   SINGLE_RACE: 'SINGLE_RACE',
   GRAND_PRIX: 'GRAND_PRIX',
+  GAUNTLET: 'GAUNTLET',
+  CUSTOM_BRACKET: 'CUSTOM_BRACKET',
 } as const;
 
 export type TournamentFormat =
@@ -94,6 +96,8 @@ export const SINGLE_STAGE_OPTIONS = [
   { value: 'TIME_TRIAL', label: 'Time Trial' },
   { value: 'SINGLE_RACE', label: 'Single Race' },
   { value: 'GRAND_PRIX', label: 'Grand Prix' },
+  { value: 'GAUNTLET', label: 'Gauntlet' },
+  { value: 'CUSTOM_BRACKET', label: 'Custom bracket' },
 ] as const;
 
 export const FORMAT_META: Record<
@@ -149,6 +153,16 @@ export const FORMAT_META: Record<
     label: 'Grand Prix',
     category: 'Racing',
     blurb: 'Series of races with championship points (F1-style).',
+  },
+  GAUNTLET: {
+    label: 'Gauntlet',
+    category: 'Bracket',
+    blurb: 'Winner stays. Each new challenger plays the champion.',
+  },
+  CUSTOM_BRACKET: {
+    label: 'Custom bracket',
+    category: 'Bracket',
+    blurb: 'Your list order is the bracket. 1 plays 2, 3 plays 4.',
   },
 };
 
@@ -218,6 +232,8 @@ export const tournamentSettingsSchema = z.object({
       'TIME_TRIAL',
       'SINGLE_RACE',
       'GRAND_PRIX',
+      'GAUNTLET',
+      'CUSTOM_BRACKET',
     ])
     .default('SINGLE_ELIMINATION'),
   showCustomRoundLabels: z.boolean().default(false),
@@ -663,6 +679,8 @@ export const generateBracketSchema = z.object({
       'TIME_TRIAL',
       'SINGLE_RACE',
       'GRAND_PRIX',
+      'GAUNTLET',
+      'CUSTOM_BRACKET',
     ])
     .optional(),
   groupCount: z.number().int().min(2).max(16).optional(),
@@ -945,6 +963,7 @@ export type { DrawCeremonyPlan, DrawCeremonyStep } from './draw-ceremony';
 // Feature-area contracts. Each file is owned by one workstream — add new
 // schemas/types there rather than in this file.
 export * from './communities';
+export * from './circuits';
 export * from './event-hub';
 export * from './scheduling';
 export * from './standings-config';

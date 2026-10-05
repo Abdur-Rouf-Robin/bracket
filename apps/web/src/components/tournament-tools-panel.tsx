@@ -34,6 +34,7 @@ export function TournamentToolsPanel({
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [playerColor, setPlayerColor] = useState('YELLOW');
   const [adminEmail, setAdminEmail] = useState('');
+  const [adminRole, setAdminRole] = useState<'ADMIN' | 'EDITOR'>('EDITOR');
   const [annTitle, setAnnTitle] = useState('');
   const [annBody, setAnnBody] = useState('');
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
@@ -193,7 +194,7 @@ export function TournamentToolsPanel({
       api(`/tournaments/${tournament.id}/admins`, {
         method: 'POST',
         token,
-        body: JSON.stringify({ email: adminEmail }),
+        body: JSON.stringify({ email: adminEmail, role: adminRole }),
       }),
     onSuccess: () => {
       setAdminEmail('');
@@ -542,14 +543,27 @@ export function TournamentToolsPanel({
         </section>
       )}
 
+      {tournament.isOwner && (
       <section className="panel-card rounded-2xl p-5">
-        <h2 className="font-display text-xl font-semibold">Share admin access</h2>
-        <div className="mt-3 flex gap-2">
+        <h2 className="font-display text-xl font-semibold">Co-admins and editors</h2>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          Editors enter scores and move matches. They cannot change the format, fees, or billing. Co-admins can. Premier is required to invite either.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
           <Input
-            placeholder="admin@example.com"
+            placeholder="person@example.com"
             value={adminEmail}
             onChange={(e) => setAdminEmail(e.target.value)}
+            className="min-w-48 flex-1"
           />
+          <select
+            className="field-select"
+            value={adminRole}
+            onChange={(e) => setAdminRole(e.target.value as 'ADMIN' | 'EDITOR')}
+          >
+            <option value="EDITOR">Editor — scores only</option>
+            <option value="ADMIN">Co-admin</option>
+          </select>
           <Button
             type="button"
             disabled={!adminEmail.trim() || adminMutation.isPending}
@@ -559,6 +573,7 @@ export function TournamentToolsPanel({
           </Button>
         </div>
       </section>
+      )}
     </div>
   );
 }

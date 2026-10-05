@@ -3,35 +3,10 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from '@/lib/auth';
-
-const PUBLIC_PATHS = ['/', '/login', '/register'];
+import { isManageConsole, isPublicPath as isPublicRoute } from '@/lib/public-paths';
 
 function isPublicPath(pathname: string) {
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-    return true;
-  }
-  if (/^\/t\/[^/]+$/.test(pathname)) {
-    return true;
-  }
-  if (pathname === '/browse' || pathname.startsWith('/browse/')) {
-    return true;
-  }
-  if (pathname.startsWith('/sports/')) {
-    return true;
-  }
-  if (/^\/t\/[^/]+\/scoreboard\/[^/]+$/.test(pathname)) {
-    return true;
-  }
-  if (/^\/t\/[^/]+\/bracket/.test(pathname)) {
-    return true;
-  }
-  if (/^\/t\/[^/]+\/embed/.test(pathname)) {
-    return true;
-  }
-  if (/^\/t\/[^/]+\/draw/.test(pathname)) {
-    return true;
-  }
-  return false;
+  return isPublicRoute(pathname) && !isManageConsole(pathname);
 }
 
 function LoadingScreen() {

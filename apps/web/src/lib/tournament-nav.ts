@@ -38,25 +38,62 @@ export type SubTab =
   | RegistrationsSub
   | SettingsSub;
 
+const PUBLIC_TABS: MainTab[] = [
+  'bracket',
+  'teams',
+  'matches',
+  'standings',
+  'schedule',
+];
+
+/** League-style formats open on the table. Knockouts open on the bracket. */
+const LEAGUE_FORMATS = new Set([
+  'ROUND_ROBIN',
+  'SWISS',
+  'LEADERBOARD',
+  'FREE_FOR_ALL',
+  'TIME_TRIAL',
+  'SINGLE_RACE',
+  'GRAND_PRIX',
+]);
+
 export function parseTournamentNav(
   searchParams: URLSearchParams,
   mode: 'public' | 'manage',
-  opts?: { canManage?: boolean },
+  opts?: { canManage?: boolean; format?: string | null; showStandings?: boolean },
 ): { tab: MainTab; sub: string } {
-  const tab = (searchParams.get('tab') as MainTab) || defaultTab(mode);
+  let tab = (searchParams.get('tab') as MainTab) || defaultTab(mode, opts);
+  if (mode === 'public' && !PUBLIC_TABS.includes(tab)) {
+    tab = defaultTab(mode, opts);
+  }
+  if (mode === 'public' && tab === 'standings' && opts?.showStandings === false) {
+    tab = 'bracket';
+  }
   let sub = searchParams.get('sub') ?? defaultSub(tab, mode);
   if (
     tab === 'matches' &&
     !searchParams.get('sub') &&
-    opts?.canManage
+    opts?.canManage &&
+    mode === 'manage'
   ) {
     sub = 'play';
   }
   return { tab, sub };
 }
 
-function defaultTab(mode: 'public' | 'manage'): MainTab {
-  return mode === 'manage' ? 'matches' : 'teams';
+function defaultTab(
+  mode: 'public' | 'manage',
+  opts?: { format?: string | null; showStandings?: boolean },
+): MainTab {
+  if (mode === 'manage') return 'matches';
+  if (
+    opts?.showStandings !== false &&
+    opts?.format &&
+    LEAGUE_FORMATS.has(opts.format)
+  ) {
+    return 'standings';
+  }
+  return 'bracket';
 }
 
 function defaultSub(tab: MainTab, mode: 'public' | 'manage'): string {
@@ -104,6 +141,8 @@ export function buildNavItems(opts: {
   showStandings: boolean;
   isOwner: boolean;
   canManage: boolean;
+  /** False for score editors: they can run matches, not change structure or fees. */
+  canConfigure?: boolean;
 }): NavItem[] {
   const teamSubs: { id: string; label: string }[] = [
     { id: 'participants', label: 'Participants' },
@@ -151,6 +190,31 @@ export function buildNavItems(opts: {
     );
   }
 
+  if (opts.mode === 'public') {
+    const items: NavItem[] = [
+      {
+        id: 'bracket',
+        label: 'Bracket',
+        subs: bracketSubs.length > 1 ? bracketSubs : undefined,
+      },
+      { id: 'teams', label: 'Participants' },
+      { id: 'matches', label: 'Matches' },
+    ];
+    if (opts.showStandings) {
+      items.push({ id: 'standings', label: 'Standings' });
+    }
+    items.push({
+      id: 'schedule',
+      label: 'Schedule',
+      subs: [
+        { id: 'calendar', label: 'Calendar' },
+        { id: 'stations', label: 'Stations' },
+        { id: 'queue', label: 'Station queue' },
+      ],
+    });
+    return items;
+  }
+
   const items: NavItem[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'teams', label: 'Teams', subs: teamSubs },
@@ -175,7 +239,7 @@ export function buildNavItems(opts: {
 
   items.push({ id: 'stats', label: 'Stats', subs: statsSubs });
 
-  if (opts.mode === 'manage' && opts.canManage) {
+  if (opts.mode === 'manage' && opts.canManage && opts.canConfigure !== false) {
     items.push({
       id: 'registrations',
       label: 'Registrations',

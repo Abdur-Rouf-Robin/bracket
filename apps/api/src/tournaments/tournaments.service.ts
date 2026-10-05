@@ -16,7 +16,9 @@ import {
   applySeedingOrder,
   expandTwoLeggedGroup,
   expandTwoLeggedKnockout,
+  generateCustomBracket,
   generateDoubleElimination,
+  generateGauntlet,
   generateRoundRobin,
   generateSingleElimination,
   generateSwiss,
@@ -394,6 +396,10 @@ export class TournamentsService {
       generated = generateSingleElimination(engineTeams, genOptions);
     } else if (format === 'DOUBLE_ELIMINATION') {
       generated = generateDoubleElimination(engineTeams, genOptions);
+    } else if (format === 'GAUNTLET') {
+      generated = generateGauntlet(engineTeams);
+    } else if (format === 'CUSTOM_BRACKET') {
+      generated = generateCustomBracket(engineTeams, genOptions);
     } else if (format === 'SWISS') {
       if (settings.swissMode === 'POTS') {
         const drawSeed = settings.drawSeed ?? createDrawSeed(id, 'swiss-pots');
@@ -1014,11 +1020,12 @@ export class TournamentsService {
     });
     if (!t) throw new NotFoundException('Tournament not found');
     const isOwner = !!(userId && t.createdById === userId);
-    const isAdmin = !!(
-      userId &&
-      t.admins?.some((a) => a.userId === userId)
-    );
+    const myAdmin = userId
+      ? t.admins?.find((a) => a.userId === userId)
+      : undefined;
+    const isAdmin = !!myAdmin;
     const canManage = isOwner || isAdmin;
+    const canConfigure = isOwner || (!!myAdmin && myAdmin.role !== 'EDITOR');
     if (!t.isPublic && !canManage) {
       throw new NotFoundException('Tournament not found');
     }
@@ -1068,6 +1075,7 @@ export class TournamentsService {
         settings,
         isOwner,
         canManage,
+        canConfigure,
       };
     }
 
@@ -1096,6 +1104,7 @@ export class TournamentsService {
       previewHidden: false,
       isOwner,
       canManage,
+      canConfigure,
     };
   }
 

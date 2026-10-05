@@ -227,6 +227,12 @@ function MatchDetail({
                   <MapPin className="size-3.5" /> {station}
                 </span>
               )}
+              {match.lobbyCode && <span>Room {match.lobbyCode}</span>}
+              {match.lobbyUrl && (
+                <a href={match.lobbyUrl} className="underline" target="_blank" rel="noreferrer">
+                  Open lobby
+                </a>
+              )}
               {match.referee && <span>Referee: {match.referee.name}</span>}
               {match.bestOf && match.bestOf > 1 && <span>Best of {match.bestOf}</span>}
             </div>
@@ -236,6 +242,17 @@ function MatchDetail({
           </Button>
         </div>
       </header>
+
+      {(canManage || canSelfReport) && token && !settings.setBasedScoring && (
+        <PhoneScoreCard
+          match={match}
+          tournament={tournament}
+          slug={slug}
+          token={token}
+          when={when}
+          station={station}
+        />
+      )}
 
       <section>
         <MatchResultView data={resultData} variant="card" />
@@ -280,7 +297,7 @@ function MatchDetail({
         <MatchVoteBar match={match} tournament={tournament} token={token} />
       </section>
 
-      {canSelfReport && token && (
+      {canSelfReport && token && settings.setBasedScoring && (
         <section className="gaming-card rounded-2xl p-5">
           <h2 className="font-display text-lg font-semibold">Report your result</h2>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
@@ -301,6 +318,135 @@ function MatchDetail({
 
       <MatchComments matchId={match.id} enabled={settings.enableMatchComments === true} />
     </div>
+  );
+}
+
+function PhoneScoreCard({
+  match,
+  tournament,
+  slug,
+  token,
+  when,
+  station,
+}: {
+  match: Match;
+  tournament: Tournament;
+  slug: string;
+  token: string;
+  when: string | null;
+  station: string | null;
+}) {
+  const qc = useQueryClient();
+  const [home, setHome] = useState(match.homeScore != null ? String(match.homeScore) : '');
+  const [away, setAway] = useState(match.awayScore != null ? String(match.awayScore) : '');
+  const [court, setCourt] = useState(station ?? '');
+  const [lobbyCode, setLobbyCode] = useState(match.lobbyCode ?? '');
+  const [lobbyUrl, setLobbyUrl] = useState(match.lobbyUrl ?? '');
+  const homeName = match.homeTeam?.name ?? 'Home';
+  const awayName = match.awayTeam?.name ?? 'Away';
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const roomChanged =
+        court !== (station ?? '') ||
+        lobbyCode !== (match.lobbyCode ?? '') ||
+        lobbyUrl !== (match.lobbyUrl ?? '');
+      if (roomChanged) {
+        await api(`/tournaments/${tournament.id}/matches/${match.id}/slot`, {
+          method: 'PATCH',
+          token,
+          body: JSON.stringify({
+            station: court.trim() || null,
+            lobbyCode: lobbyCode.trim() || null,
+            lobbyUrl: lobbyUrl.trim() || null,
+          }),
+        });
+      }
+      await api(`/matches/${match.id}/result`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({
+          homeScore: home === '' ? 0 : Number(home),
+          awayScore: away === '' ? 0 : Number(away),
+          isDraw: home !== '' && home === away,
+          force: match.status === 'COMPLETED',
+          winnersOnly: false,
+          playerStats: [],
+        }),
+      });
+    },
+    onSuccess: async () => {
+      toast.success('Result saved');
+      await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  return (
+    <section className="gaming-card rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-lg font-semibold">Score this match</h2>
+        <p className="text-sm text-[var(--color-muted)]">
+          {when ?? 'Time not set'}
+          {court ? '' : station ? ` · ${station}` : ''}
+        </p>
+      </div>
+      <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Court
+        <Input
+          value={court}
+          onChange={(e) => setCourt(e.target.value)}
+          placeholder="Court or station"
+          className="mt-1"
+        />
+      </label>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          Lobby code
+          <Input
+            value={lobbyCode}
+            onChange={(e) => setLobbyCode(e.target.value)}
+            placeholder="Riot or Steam code"
+            className="mt-1"
+          />
+        </label>
+        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          Lobby link
+          <Input
+            value={lobbyUrl}
+            onChange={(e) => setLobbyUrl(e.target.value)}
+            placeholder="https://"
+            className="mt-1"
+          />
+        </label>
+      </div>
+      <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+        <label className="block text-sm font-semibold">
+          {homeName}
+          <input
+            inputMode="numeric"
+            value={home}
+            onChange={(e) => setHome(e.target.value.replace(/[^\d.]/g, ''))}
+            className="mt-1 h-16 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] text-center font-display text-3xl font-bold outline-none focus:border-[var(--color-accent)]"
+            aria-label={`${homeName} score`}
+          />
+        </label>
+        <span className="pb-4 text-sm text-[var(--color-muted)]">vs</span>
+        <label className="block text-sm font-semibold">
+          {awayName}
+          <input
+            inputMode="numeric"
+            value={away}
+            onChange={(e) => setAway(e.target.value.replace(/[^\d.]/g, ''))}
+            className="mt-1 h-16 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] text-center font-display text-3xl font-bold outline-none focus:border-[var(--color-accent)]"
+            aria-label={`${awayName} score`}
+          />
+        </label>
+      </div>
+      <Button type="button" className="mt-4 h-12 w-full text-base" disabled={save.isPending || !match.homeTeamId || !match.awayTeamId} onClick={() => save.mutate()}>
+        {save.isPending ? 'Saving…' : 'Save result'}
+      </Button>
+    </section>
   );
 }
 

@@ -17,6 +17,8 @@ export type BillingInterval =
 
 export type PlanLimits = {
   maxParticipants: number;
+  /** Null means unlimited. A tournament is active after a result in the last 30 days. */
+  maxActiveTournaments: number | null;
   fileAttachmentsMb: number;
   customEmbedThemes: boolean;
   adsFree: boolean;
@@ -24,6 +26,8 @@ export type PlanLimits = {
   prioritySupport: boolean;
   proCommunities: number;
   csvPdfExport: boolean;
+  /** Co-admins and score-only editors. */
+  coAdmins: boolean;
 };
 
 export type PlanDefinition = {
@@ -41,49 +45,66 @@ export type PlanDefinition = {
 export const FREE_MAX_PARTICIPANTS_DEFAULT = 4096;
 export const PREMIER_MAX_PARTICIPANTS_DEFAULT = 4096;
 
-const UNLOCKED_LIMITS: PlanLimits = {
-  maxParticipants: FREE_MAX_PARTICIPANTS_DEFAULT,
-  fileAttachmentsMb: 25,
-  customEmbedThemes: true,
-  adsFree: true,
-  autoScheduler: true,
-  prioritySupport: true,
-  proCommunities: 999,
-  csvPdfExport: true,
-};
-
-const UNLOCKED_FEATURES = [
-  'Unlimited tournaments, communities and events',
+const SHARED_FEATURES = [
   `Up to ${FREE_MAX_PARTICIPANTS_DEFAULT} participants per tournament`,
-  'All formats: round robin, Swiss, single/double elim, groups, leaderboard, racing',
-  'Mobile, PC, console and sports catalogs',
-  'Live cricket scoreboard with international playing conditions',
-  'Auto-scheduler, referees, CSV/PDF, embeds, TV mode and custom branding',
-  'No ads. No paywalls. Free forever.',
+  'All formats, including home-and-away round robin',
+  'Auto-scheduler, blackouts, referees, CSV/PDF, embeds and TV mode',
+  'Live cricket scoreboard',
+  'No ads on public pages',
 ];
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
   FREE: {
     id: 'FREE',
-    name: 'Free',
-    tagline: 'Every organizer feature, free forever.',
+    name: 'Starter',
+    tagline: 'One active tournament. Every format.',
     priceMonthlyCents: 0,
     priceYearlyCents: 0,
-    features: UNLOCKED_FEATURES,
-    limits: UNLOCKED_LIMITS,
+    features: [
+      '1 active tournament (a result in the last 30 days)',
+      'You are the only organizer',
+      ...SHARED_FEATURES,
+    ],
+    limits: {
+      maxParticipants: FREE_MAX_PARTICIPANTS_DEFAULT,
+      maxActiveTournaments: 1,
+      fileAttachmentsMb: 25,
+      customEmbedThemes: true,
+      adsFree: true,
+      autoScheduler: true,
+      prioritySupport: false,
+      proCommunities: 1,
+      csvPdfExport: true,
+      coAdmins: false,
+    },
   },
   PREMIER: {
     id: 'PREMIER',
-    name: 'Free',
-    tagline: 'Every organizer feature, free forever.',
-    priceMonthlyCents: 0,
-    priceYearlyCents: 0,
-    features: UNLOCKED_FEATURES,
-    limits: UNLOCKED_LIMITS,
+    name: 'Premier',
+    tagline: 'Unlimited active tournaments, co-admins and score editors.',
+    priceMonthlyCents: 900,
+    priceYearlyCents: 9000,
+    features: [
+      'Unlimited active tournaments',
+      'Co-admins and score-only editors',
+      ...SHARED_FEATURES,
+    ],
+    limits: {
+      maxParticipants: PREMIER_MAX_PARTICIPANTS_DEFAULT,
+      maxActiveTournaments: null,
+      fileAttachmentsMb: 25,
+      customEmbedThemes: true,
+      adsFree: true,
+      autoScheduler: true,
+      prioritySupport: true,
+      proCommunities: 999,
+      csvPdfExport: true,
+      coAdmins: true,
+    },
   },
 };
 
-export const PLAN_LIST: PlanDefinition[] = [PLANS.FREE];
+export const PLAN_LIST: PlanDefinition[] = [PLANS.FREE, PLANS.PREMIER];
 
 /** Effective monthly price in cents for a given interval. */
 export function planMonthlyEquivalentCents(

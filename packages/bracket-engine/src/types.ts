@@ -124,4 +124,6 @@ export interface GenerateOptions {
   losersStartTeamIds?: string[];
   /** Force a minimum bracket size (power of two); used for split participants. */
   minBracketSize?: number;
+  /** TRADITIONAL uses standard seeding. SEQUENTIAL pairs the list in order (1v2, 3v4). */
+  pairing?: 'TRADITIONAL' | 'SEQUENTIAL';
 }

@@ -124,18 +124,62 @@ export class BillingService {
   }
 
   async checkout(
-    _userId: string,
-    _input: CheckoutInput,
+    userId: string,
+    input: CheckoutInput,
   ): Promise<CheckoutResponse> {
-    throw new BadRequestException(
-      'Platform subscriptions are not offered. Stripe is only for your own entry fees and tickets.',
+    const stripe = this.getStripe();
+    const priceId = this.config.get<string>(
+      input.interval === 'year'
+        ? 'STRIPE_PRICE_PREMIER_YEARLY'
+        : 'STRIPE_PRICE_PREMIER_MONTHLY',
     );
+    if (!stripe || !priceId) return { configured: false };
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name,
+        metadata: { userId },
+      });
+      customerId = customer.id;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { stripeCustomerId: customerId },
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${this.appUrl()}/settings/billing?checkout=success`,
+      cancel_url: `${this.appUrl()}/pricing`,
+      metadata: { userId, type: 'subscription' },
+      subscription_data: { metadata: { userId } },
+    });
+    if (!session.url) {
+      throw new BadRequestException('Stripe did not return a checkout URL');
+    }
+    return { url: session.url };
   }
 
-  async portal(_userId: string): Promise<CheckoutResponse> {
-    throw new BadRequestException(
-      'There is no platform billing portal. The site is free forever.',
-    );
+  async portal(userId: string): Promise<CheckoutResponse> {
+    const stripe = this.getStripe();
+    if (!stripe) return { configured: false };
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { stripeCustomerId: true },
+    });
+    if (!user?.stripeCustomerId) return { configured: false };
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: `${this.appUrl()}/settings/billing`,
+    });
+    return { url: session.url };
   }
 
   async grantPlan(input: AdminGrantPlanInput) {

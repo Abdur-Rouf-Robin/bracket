@@ -114,18 +114,34 @@ export function CalendarView({
   const conflicts: ScheduleConflictDto[] = data?.conflicts ?? [];
 
   const moveMatch = useMutation({
-    mutationFn: ({ matchId, target }: { matchId: string; target: DropTarget }) =>
-      api<{ match: ScheduleMatchDto; conflicts: ScheduleConflictDto[] }>(
+    mutationFn: async ({ matchId, target }: { matchId: string; target: DropTarget }) => {
+      const body = {
+        scheduledAt: target.startAt,
+        stationId: target.stationId,
+      };
+      const preview = await api<{ conflicts: ScheduleConflictDto[] }>(
         `/tournaments/${tournament.id}/matches/${matchId}/slot`,
         {
           method: 'PATCH',
           token,
-          body: JSON.stringify({
-            scheduledAt: target.startAt,
-            stationId: target.stationId,
-          }),
+          body: JSON.stringify({ ...body, preview: true }),
         },
-      ),
+      );
+      const mine = preview.conflicts.filter((c) => c.matchIds.includes(matchId));
+      if (mine.length) {
+        const lines = mine.map((c) => `${conflictLabel(c.kind)}: ${c.message}`).join('\n');
+        const ok = window.confirm(`This move creates a clash:\n\n${lines}\n\nSave it anyway?`);
+        if (!ok) throw new Error('Move cancelled');
+      }
+      return api<{ match: ScheduleMatchDto; conflicts: ScheduleConflictDto[] }>(
+        `/tournaments/${tournament.id}/matches/${matchId}/slot`,
+        {
+          method: 'PATCH',
+          token,
+          body: JSON.stringify(body),
+        },
+      );
+    },
     onSuccess: async (res, vars) => {
       await qc.invalidateQueries({ queryKey: ['tournament', tournament.slug] });
       const mine = res.conflicts.filter((c) => c.matchIds.includes(vars.matchId));
@@ -135,7 +151,10 @@ export function CalendarView({
         toast.success(vars.target.startAt ? 'Match moved' : 'Match unscheduled');
       }
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (e.message === 'Move cancelled') return;
+      toast.error(e.message);
+    },
   });
 
   function addTimeRow() {

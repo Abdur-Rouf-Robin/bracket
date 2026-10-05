@@ -37,8 +37,13 @@ export default function PublicTournamentPage() {
       api<Tournament>(`/t/${slug}`, { token: token ?? undefined }),
   });
 
+  const settingsForNav = data?.settings as
+    | { showStandings?: boolean }
+    | undefined;
   const { tab, sub } = parseTournamentNav(searchParams, 'public', {
     canManage: !!data?.canManage,
+    format: data?.format,
+    showStandings: settingsForNav?.showStandings !== false,
   });
 
   const { data: mvpRows = [] } = useQuery({
@@ -129,7 +134,7 @@ export default function PublicTournamentPage() {
               actions={
                 data.canManage ? (
                   <Button size="sm" asChild>
-                    <Link href={`/t/${data.slug}?tab=matches&sub=play`}>Enter results</Link>
+                    <Link href={`/t/${data.slug}/manage?tab=matches&sub=play`}>Enter results</Link>
                   </Button>
                 ) : undefined
               }
