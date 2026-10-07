@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { BulkTeamInput, parseBulkTeams } from '@/components/bulk-team-input';
+import { TeamNameForm, type NamedTeam } from '@/components/team-name-form';
 import { PredictionCustomFieldsEditor } from '@/components/prediction-custom-fields-editor';
 import { ImageUrlField } from '@/components/image-url-field';
 import { SHARE_IMAGE_ASSET_SPECS } from '@bracket/shared';
@@ -33,6 +34,7 @@ import type { Tournament } from '@/lib/types';
 
 type Step = 'basics' | 'count' | 'format' | 'rules' | 'registration' | 'teams';
 type WizardMode = 'quick' | 'advanced';
+type NameEntry = 'list' | 'form';
 type QuickFormat =
   | 'SINGLE_ELIMINATION'
   | 'DOUBLE_ELIMINATION'
@@ -90,6 +92,8 @@ export default function NewTournamentPage() {
   const [wizardMode, setWizardMode] = useState<WizardMode>('quick');
   const [quickFormat, setQuickFormat] = useState<QuickFormat>('SINGLE_ELIMINATION');
   const [participantText, setParticipantText] = useState('');
+  const [nameEntry, setNameEntry] = useState<NameEntry>('list');
+  const [formTeams, setFormTeams] = useState<NamedTeam[]>([]);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -110,6 +114,8 @@ export default function NewTournamentPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [settings, setSettings] = useState<TournamentSettings>({
     ...DEFAULT_TOURNAMENT_SETTINGS,
+    requireMatchCheckIn: true,
+    confirmSelfReportedScores: true,
   });
 
   const [teamCount, setTeamCount] = useState(8);
@@ -439,11 +445,18 @@ export default function NewTournamentPage() {
     setPending(true);
     setError('');
     try {
+      const formReady = nameEntry === 'form' ? formTeams.filter((t) => t.name.trim()) : [];
+      if (nameEntry === 'form' && formReady.length < 2) {
+        setError('Add at least two teams with the form');
+        setPending(false);
+        return;
+      }
+      const participantCount = nameEntry === 'form' ? formReady.length : teamCount;
       const useGroups = settings.stageMode === 'TWO_STAGE';
       const gCount =
         selectedPlan?.groupCount && selectedPlan.groupCount > 0
           ? selectedPlan.groupCount
-          : Math.max(2, Math.ceil(teamCount / settings.participantsPerGroup));
+          : Math.max(2, Math.ceil(participantCount / settings.participantsPerGroup));
       const groupNames = Array.from({ length: gCount }, (_, i) =>
         `Group ${String.fromCharCode(65 + i)}`,
       );
@@ -452,22 +465,20 @@ export default function NewTournamentPage() {
         method: 'POST',
         token,
         body: JSON.stringify({
-          teams: teamNames.map((n, i) => ({
-            name: n.trim() || `Team ${i + 1}`,
+          teams: (nameEntry === 'form'
+            ? formReady.map((t) => ({ name: t.name.trim(), players: t.players }))
+            : teamNames.map((n, i) => ({
+                name: n.trim() || `Team ${i + 1}`,
+                players: teamPlayers[i] ?? [],
+              }))
+          ).map((t, i) => ({
+            name: t.name,
             ...(useGroups
               ? { groupName: groupNames[i % groupNames.length] }
               : {}),
-            ...(settings.requireTeamRegistration
-              ? {
-                  players: (teamPlayers[i] ?? [])
-                    .map((p) => p.trim())
-                    .filter(Boolean),
-                }
-              : {
-                  players: (teamPlayers[i] ?? [])
-                    .map((p) => p.trim())
-                    .filter(Boolean),
-                }),
+            players: (t.players ?? [])
+              .map((p) => p.trim())
+              .filter(Boolean),
           })),
         }),
       });
@@ -503,9 +514,21 @@ export default function NewTournamentPage() {
       setError('Give the tournament a name');
       return;
     }
-    const parsed = parseBulkTeams(participantText);
+    const parsed =
+      nameEntry === 'form'
+        ? formTeams
+            .map((t) => ({
+              name: t.name.trim(),
+              players: t.players.map((p) => p.trim()).filter(Boolean),
+            }))
+            .filter((t) => t.name)
+        : parseBulkTeams(participantText);
     if (parsed.length < 2) {
-      setError('Add at least two participants, one per line');
+      setError(
+        nameEntry === 'form'
+          ? 'Add at least two teams with the form'
+          : 'Add at least two participants, one per line',
+      );
       return;
     }
     setPending(true);
@@ -651,7 +674,7 @@ export default function NewTournamentPage() {
             </p>
             <h1 className="mt-2 font-display text-3xl font-bold">New tournament</h1>
             <p className="mt-2 text-[var(--color-muted)]">
-              Name, format, paste names, generate. Open Advanced for groups, registration
+              Name, format, then paste names or fill in each team. Open Advanced for groups, registration
               and scoring rules.
             </p>
             {(templateName || communityId) && (
@@ -701,20 +724,54 @@ export default function NewTournamentPage() {
                 </div>
               </div>
               <div>
-                <Label htmlFor="quick-participants">Participants</Label>
-                <p className="mt-1 text-xs text-[var(--color-muted)]">
-                  One name per line. Teams: Name | Player1, Player2
-                </p>
-                <textarea
-                  id="quick-participants"
-                  className="field-textarea mt-2 min-h-[160px]"
-                  value={participantText}
-                  onChange={(e) => setParticipantText(e.target.value)}
-                  placeholder={'Alex\nJordan\nSam\nRiley'}
-                />
-                <p className="mt-1 text-xs text-[var(--color-muted)]">
-                  {parseBulkTeams(participantText).length} names
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                      nameEntry === 'list' ? 'choice-btn-active' : 'choice-btn'
+                    }`}
+                    onClick={() => setNameEntry('list')}
+                  >
+                    Paste names
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                      nameEntry === 'form' ? 'choice-btn-active' : 'choice-btn'
+                    }`}
+                    onClick={() => setNameEntry('form')}
+                  >
+                    Fill a form
+                  </button>
+                </div>
+                {nameEntry === 'list' ? (
+                  <>
+                    <Label htmlFor="quick-participants" className="mt-4">
+                      Participants
+                    </Label>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      One name per line. Teams: Name | Player1, Player2
+                    </p>
+                    <textarea
+                      id="quick-participants"
+                      className="field-textarea mt-2 min-h-[160px]"
+                      value={participantText}
+                      onChange={(e) => setParticipantText(e.target.value)}
+                      placeholder={'Alex\nJordan\nSam\nRiley'}
+                    />
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      {parseBulkTeams(participantText).length} names
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-4">
+                    <TeamNameForm
+                      teams={formTeams}
+                      maxCount={settings.maxParticipants}
+                      onChange={setFormTeams}
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="flex items-center gap-2 text-sm">
@@ -1909,6 +1966,34 @@ export default function NewTournamentPage() {
 
         {step === 'teams' && (
           <div className="panel-card mt-8 space-y-4 rounded-2xl p-6">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                  nameEntry === 'list' ? 'choice-btn-active' : 'choice-btn'
+                }`}
+                onClick={() => setNameEntry('list')}
+              >
+                Numbered list
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                  nameEntry === 'form' ? 'choice-btn-active' : 'choice-btn'
+                }`}
+                onClick={() => setNameEntry('form')}
+              >
+                Fill a form
+              </button>
+            </div>
+            {nameEntry === 'form' ? (
+              <TeamNameForm
+                teams={formTeams}
+                maxCount={settings.maxParticipants}
+                onChange={setFormTeams}
+              />
+            ) : (
+              <>
             <BulkTeamInput
               maxCount={settings.maxParticipants}
               showPlayerHint={
@@ -2020,6 +2105,8 @@ export default function NewTournamentPage() {
                 </div>
               ))}
             </div>
+              </>
+            )}
             <div className="flex gap-2">
               <Button
                 variant="secondary"

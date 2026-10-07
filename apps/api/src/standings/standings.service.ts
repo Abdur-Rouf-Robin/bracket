@@ -392,6 +392,18 @@ export class StandingsService {
 
             sonnebornBerger: r.sonnebornBerger ?? null,
 
+            homeWins: r.homeWins ?? 0,
+
+            homeDraws: r.homeDraws ?? 0,
+
+            homeLosses: r.homeLosses ?? 0,
+
+            awayWins: r.awayWins ?? 0,
+
+            awayDraws: r.awayDraws ?? 0,
+
+            awayLosses: r.awayLosses ?? 0,
+
           })),
 
         });

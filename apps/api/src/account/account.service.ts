@@ -288,9 +288,14 @@ export class AccountService {
       `<p>Hi ${escapeHtml(user.name)},</p><p>Confirm your email address to unlock tournament sign-ups that require a verified account.</p>`,
       { label: 'Verify email', url },
     );
-    await this.notifications.sendEmail(user.email, 'Verify your Bracket email', html);
+    const delivery = await this.notifications.sendEmail(user.email, 'Verify your Bracket email', html);
     this.logger.log(`Verification email queued for ${user.email}`);
-    return { sent: true, alreadyVerified: false };
+    return {
+      sent: true,
+      alreadyVerified: false,
+      delivered: delivery.delivered,
+      previewUrl: delivery.delivered ? null : delivery.href,
+    };
   }
 
   /** Rate-limited variant used by the authenticated resend endpoint. */

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ImageUrlField } from '@/components/image-url-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { rosterLimits, type TournamentSettings } from '@bracket/shared';
+import { ORGANIZER_ROSTER_MAX, rosterLimits, type TournamentSettings } from '@bracket/shared';
 import { api } from '@/lib/api';
 import type { Team, TeamPlayer, Tournament } from '@/lib/types';
 
@@ -251,18 +251,17 @@ function TeamRosterEditor({
               <div>
                 <Label>Players</Label>
                 <p className="text-[10px] text-[var(--color-muted)]">
-                  {limits.starters} starter{limits.starters === 1 ? '' : 's'}
+                  {visiblePlayers.length} of {ORGANIZER_ROSTER_MAX} players
                   {allowSubs
-                    ? ` + up to ${limits.substituteSlots} sub${limits.substituteSlots === 1 ? '' : 's'}`
-                    : ''}{' '}
-                  · max {limits.maxRoster}
+                    ? ` · sign-up form asks for ${limits.starters} starter${limits.starters === 1 ? '' : 's'}`
+                    : ''}
                 </p>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 className="h-8 gap-1 text-xs"
-                disabled={rosterLocked || visiblePlayers.length >= limits.maxRoster}
+                disabled={rosterLocked || visiblePlayers.length >= ORGANIZER_ROSTER_MAX}
                 onClick={addPlayer}
               >
                 <Plus className="size-3.5" />

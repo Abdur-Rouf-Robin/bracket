@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
             <p className="font-semibold">Check your inbox</p>
             <p className="mt-1 text-[var(--color-muted)]">
               If an account exists for <span className="text-[var(--color-ink)]">{email}</span>,
-              a reset link is on its way. Didn&apos;t get it? Check spam or{' '}
+              a reset link is on its way. If mail is not leaving the server, a site admin can open it from Admin. Didn&apos;t get it? Check spam or{' '}
               <button
                 type="button"
                 className="text-[var(--color-accent)] hover:underline"

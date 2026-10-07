@@ -95,6 +95,8 @@ export class CsvExportsService {
       wins: s.wins,
       draws: s.draws,
       losses: s.losses,
+      home: `${s.homeWins}-${s.homeDraws}-${s.homeLosses}`,
+      away: `${s.awayWins}-${s.awayDraws}-${s.awayLosses}`,
       pointsFor: scoreText(s.pointsFor),
       pointsAgainst: scoreText(s.pointsAgainst),
       diff: scoreText(s.pointsFor - s.pointsAgainst),

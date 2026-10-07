@@ -273,6 +273,19 @@ export function RegistrationSettingsPanel({
         )}
       </section>
 
+      <BlocklistField
+        value={(settings.registrationBlocklist ?? []).join('\n')}
+        onCommit={(text) =>
+          patch({
+            registrationBlocklist: text
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .slice(0, 200),
+          })
+        }
+      />
+
       <section className="panel-card space-y-4 rounded-xl p-4">
         <SectionTitle
           title="Entry fee"
@@ -346,10 +359,22 @@ export function RegistrationSettingsPanel({
             onCommit={(v) => patch({ checkInOpensMinutesBefore: v })}
           />
           <Toggle
+            label="Require court check-in"
+            hint="Both teams confirm they are at the court before a score can be saved. A no-show is a forfeit."
+            checked={settings.requireMatchCheckIn === true}
+            onChange={(v) => patch({ requireMatchCheckIn: v })}
+          />
+          <Toggle
             label="Participants may report scores"
             hint="Team captains can submit results for their own matches."
             checked={settings.allowParticipantsReportScores === true}
             onChange={(v) => patch({ allowParticipantsReportScores: v })}
+          />
+          <Toggle
+            label="Confirm self-reported scores"
+            hint="The other team or the organizer must accept a captain's score before it advances the bracket."
+            checked={settings.confirmSelfReportedScores !== false}
+            onChange={(v) => patch({ confirmSelfReportedScores: v })}
           />
           <Toggle
             label="Match attachments"
@@ -485,6 +510,43 @@ function DateTimeField({
         )}
       </div>
     </FieldRow>
+  );
+}
+
+function BlocklistField({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const dirty = draft !== value;
+  return (
+    <section className="panel-card space-y-3 rounded-xl p-4">
+      <SectionTitle
+        title="Blocklist"
+        description="One name or email per line. Those participants cannot use the public sign-up form."
+      />
+      <textarea
+        className="field-textarea min-h-28"
+        value={draft}
+        maxLength={8000}
+        placeholder={'blocked@example.com\nTeam name'}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div className="flex justify-end gap-2">
+        {dirty && (
+          <Button type="button" variant="ghost" className="h-8 text-xs" onClick={() => setDraft(value)}>
+            Discard
+          </Button>
+        )}
+        <Button type="button" className="h-8 text-xs" disabled={!dirty} onClick={() => onCommit(draft)}>
+          Save blocklist
+        </Button>
+      </div>
+    </section>
   );
 }
 

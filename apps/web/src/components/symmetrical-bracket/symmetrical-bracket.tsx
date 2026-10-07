@@ -22,38 +22,44 @@ function isWinner(m: Match, side: 'home' | 'away'): boolean {
   return id === m.winnerTeamId;
 }
 
-function winnerTeam(m: Match): Team | null | undefined {
-  if (m.status !== 'COMPLETED') return null;
+function SideSlot({
+  match,
+  side,
+  showSeeds,
+}: {
+  match: Match;
+  side: 'home' | 'away';
+  showSeeds: boolean;
+}) {
+  const team = teamLabel(match, side);
+  const byeSlot = match.isBye && !team;
+  const showScore = match.status === 'COMPLETED' && !match.isBye;
+  const bestOf = match.bestOf && match.bestOf > 1 ? match.bestOf : null;
+  const score = side === 'home' ? match.homeScore ?? 0 : match.awayScore ?? 0;
+
   return (
-    m.winnerTeam ??
-    (m.winnerTeamId
-      ? { id: m.winnerTeamId, name: 'Winner', seed: null, groupId: null }
-      : null)
+    <div
+      className={`flex items-center justify-between gap-1 px-2 py-1 ${
+        side === 'home' ? 'border-b border-[#2a3140]' : ''
+      } ${isWinner(match, side) ? 'bg-emerald-500/15' : ''}`}
+    >
+      {byeSlot ? (
+        <span className="truncate text-[11px] font-medium text-[#9aa3b5]">Bye</span>
+      ) : (
+        <TeamBadge team={team} size="sm" showSeed={showSeeds} onDark />
+      )}
+      {showScore && (
+        <span className={`shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5] ${bestOf ? 'mr-6' : ''}`}>
+          {score}
+        </span>
+      )}
+    </div>
   );
 }
 
 function MatchNode({ node, showSeeds }: { node: LayoutMatch; showSeeds: boolean }) {
-  const { match: m, compact } = node;
+  const { match: m } = node;
   const bestOf = m.bestOf && m.bestOf > 1 ? m.bestOf : null;
-
-  if (compact) {
-    const w = winnerTeam(m);
-    return (
-      <div
-        className="flex items-center justify-center rounded border border-[#2a3140] bg-[#12151c] px-2 shadow-sm"
-        style={{ width: '100%', height: '100%' }}
-      >
-        {w ? (
-          <TeamBadge team={w} size="sm" />
-        ) : (
-          <div className="flex gap-1">
-            <div className="size-6 rounded border border-dashed border-[#3a4255] bg-[#1a1f2a]" />
-            <div className="size-6 rounded border border-dashed border-[#3a4255] bg-[#1a1f2a]" />
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div
@@ -66,30 +72,8 @@ function MatchNode({ node, showSeeds }: { node: LayoutMatch; showSeeds: boolean 
           Bo{bestOf}
         </span>
       )}
-      <div
-        className={`flex items-center justify-between gap-1 border-b border-[#2a3140] px-2 py-1 ${
-          isWinner(m, 'home') ? 'bg-emerald-500/15' : ''
-        }`}
-      >
-        <TeamBadge team={teamLabel(m, 'home')} size="sm" showSeed={showSeeds} />
-        {m.status === 'COMPLETED' && (
-          <span className={`shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5] ${bestOf ? 'mr-6' : ''}`}>
-            {m.homeScore ?? 0}
-          </span>
-        )}
-      </div>
-      <div
-        className={`flex items-center justify-between gap-1 px-2 py-1 ${
-          isWinner(m, 'away') ? 'bg-emerald-500/15' : ''
-        }`}
-      >
-        <TeamBadge team={teamLabel(m, 'away')} size="sm" showSeed={showSeeds} />
-        {m.status === 'COMPLETED' && (
-          <span className={`shrink-0 text-[10px] font-bold tabular-nums text-[#9aa3b5] ${bestOf ? 'mr-6' : ''}`}>
-            {m.awayScore ?? 0}
-          </span>
-        )}
-      </div>
+      <SideSlot match={m} side="home" showSeeds={showSeeds} />
+      <SideSlot match={m} side="away" showSeeds={showSeeds} />
     </div>
   );
 }
@@ -293,7 +277,7 @@ export function SymmetricalBracket({
                 <div className="space-y-1">
                   {(['home', 'away'] as const).map((side) => (
                     <div key={side} className="flex items-center justify-between gap-1">
-                      <TeamBadge team={teamLabel(thirdPlace, side)} size="sm" showSeed={showSeeds} />
+                      <TeamBadge team={teamLabel(thirdPlace, side)} size="sm" showSeed={showSeeds} onDark />
                       {thirdPlace.status === 'COMPLETED' && (
                         <span
                           className={`text-[10px] font-bold tabular-nums ${

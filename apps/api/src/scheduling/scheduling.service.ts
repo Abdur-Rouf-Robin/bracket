@@ -1033,13 +1033,16 @@ export class SchedulingService {
 
     const entries = stations.map((s) => {
       const mine = rows.filter((m) => m.stationId === s.id && !m.isBye);
+      const live = mine.filter((m) => m.status === MatchStatus.IN_PROGRESS || m.status === MatchStatus.PROVISIONAL).sort(byTime);
       const ready = mine.filter((m) => m.status === MatchStatus.READY).sort(byTime);
       const pending = mine.filter((m) => m.status === MatchStatus.PENDING).sort(byTime);
       const completed = mine
         .filter((m) => m.status === MatchStatus.COMPLETED)
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      const current = ready[0] ?? null;
-      const upNext = [...ready.slice(1), ...pending].slice(0, 3);
+      const current = live[0] ?? ready[0] ?? null;
+      const restLive = current?.id === live[0]?.id ? live.slice(1) : live;
+      const restReady = current?.id === ready[0]?.id ? ready.slice(1) : ready;
+      const upNext = [...restLive, ...restReady, ...pending].slice(0, 3);
       return {
         station: this.stationDto(s, canManage),
         current: current ? dto(current) : null,

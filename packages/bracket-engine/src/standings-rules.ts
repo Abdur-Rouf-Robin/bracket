@@ -412,6 +412,12 @@ export function computeStandingsInternational(
       setsLost: 0,
       adjustments: 0,
       form: [],
+      homeWins: 0,
+      homeDraws: 0,
+      homeLosses: 0,
+      awayWins: 0,
+      awayDraws: 0,
+      awayLosses: 0,
     });
   }
 
@@ -446,16 +452,22 @@ export function computeStandingsInternational(
     if (m.isDraw) {
       home.draws += 1;
       away.draws += 1;
+      home.homeDraws = (home.homeDraws ?? 0) + 1;
+      away.awayDraws = (away.awayDraws ?? 0) + 1;
       home.points += pointsDraw;
       away.points += pointsDraw;
     } else if (m.winnerTeamId === m.homeTeamId) {
       home.wins += 1;
       away.losses += 1;
+      home.homeWins = (home.homeWins ?? 0) + 1;
+      away.awayLosses = (away.awayLosses ?? 0) + 1;
       home.points += pointsWin;
       away.points += pointsLoss;
     } else if (m.winnerTeamId === m.awayTeamId) {
       away.wins += 1;
       home.losses += 1;
+      away.awayWins = (away.awayWins ?? 0) + 1;
+      home.homeLosses = (home.homeLosses ?? 0) + 1;
       away.points += pointsWin;
       home.points += pointsLoss;
     }

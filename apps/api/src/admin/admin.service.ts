@@ -29,6 +29,15 @@ const USER_SELECT = {
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
+  recentMail() {
+    return this.prisma.outboundMail.findMany({
+      where: { delivered: false },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: { id: true, toEmail: true, subject: true, href: true, createdAt: true },
+    });
+  }
+
   async stats() {
     const [
       users,

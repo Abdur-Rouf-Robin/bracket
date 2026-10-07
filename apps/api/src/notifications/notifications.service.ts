@@ -119,7 +119,23 @@ export class NotificationsService {
   }
 
   /** Send a transactional email via Resend (dry-run logs when no API key). */
-  async sendEmail(to: string, subject: string, html: string) {
+  async sendEmail(to: string, subject: string, html: string, opts?: { inbox?: boolean }) {
+    const href = html.match(/href="(https?:\/\/[^"]+)"/)?.[1] ?? null;
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (opts?.inbox !== false) {
+      const user = await this.prisma.user.findFirst({
+        where: { email: to },
+        select: { id: true },
+      });
+      if (user) {
+        await this.inbox.notify(user.id, {
+          type: 'mail',
+          title: subject,
+          body: text,
+          href,
+        });
+      }
+    }
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     const from = this.config.get<string>('EMAIL_FROM') ?? 'Bracket <onboarding@resend.dev>';
 
@@ -135,17 +151,37 @@ export class NotificationsService {
         });
         if (!res.ok) {
           this.logger.warn(`Resend email failed (${res.status}) for ${to}`);
-          return { delivered: false, mode: 'resend' as const };
+          await this.rememberMail(to, subject, href, false);
+          return { delivered: false, mode: 'resend' as const, href };
         }
-        return { delivered: true, mode: 'resend' as const };
+        await this.rememberMail(to, subject, href, true);
+        return { delivered: true, mode: 'resend' as const, href };
       } catch (err) {
         this.logger.warn(`Resend error: ${(err as Error).message}`);
-        return { delivered: false, mode: 'resend' as const };
+        await this.rememberMail(to, subject, href, false);
+        return { delivered: false, mode: 'resend' as const, href };
       }
     }
 
     this.logger.log(`Email (dry-run) to ${to}: ${subject}`);
-    return { delivered: false, mode: 'dry-run' as const };
+    await this.rememberMail(to, subject, href, false);
+    return { delivered: false, mode: 'dry-run' as const, href };
+  }
+
+  private async rememberMail(to: string, subject: string, href: string | null, delivered: boolean) {
+    if (delivered) return;
+    try {
+      await this.prisma.outboundMail.create({
+        data: {
+          toEmail: to,
+          subject: subject.slice(0, 200),
+          href,
+          delivered: false,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Could not store undelivered mail: ${(err as Error).message}`);
+    }
   }
 
   isConfigured() {

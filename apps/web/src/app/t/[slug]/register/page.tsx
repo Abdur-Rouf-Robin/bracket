@@ -787,7 +787,7 @@ function RegistrationStatusView({
         setCheckoutUrl(res.checkoutUrl);
         window.location.href = res.checkoutUrl;
       } else {
-        toast.error('Payments are not configured for this tournament yet.');
+        toast.message('Card checkout is off. Pay the host at the event and they will mark the fee paid.');
       }
     },
     onError: (err: Error) => toast.error(err.message),
@@ -815,7 +815,7 @@ function RegistrationStatusView({
   if (unpaid) {
     icon = <CreditCard className="size-10 text-amber-300" />;
     headline = 'Payment pending';
-    sub = `Complete the ${formatMoney(s.amountCents, s.currency)} entry fee to confirm your spot.`;
+    sub = `Pay ${formatMoney(s.amountCents, s.currency)} by card if checkout is available, or pay the host at the event. They mark the fee paid in Registrations.`;
   } else if (s.status === 'APPROVED') {
     icon = <CheckCircle2 className="size-10 text-[var(--color-ok)]" />;
     headline = "You're in!";

@@ -91,6 +91,10 @@ export type Match = {
   placementRank?: number | null;
   reportedByUserId?: string | null;
   reportedAt?: string | null;
+  homeArrivedAt?: string | null;
+  awayArrivedAt?: string | null;
+  reviewStatus?: string | null;
+  reviewNote?: string | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   legNumber?: number | null;
@@ -135,6 +139,12 @@ export type Standing = {
   adjustments?: number;
   buchholz?: number | null;
   sonnebornBerger?: number | null;
+  homeWins?: number;
+  homeDraws?: number;
+  homeLosses?: number;
+  awayWins?: number;
+  awayDraws?: number;
+  awayLosses?: number;
   team: Team;
   group?: Group | null;
 };

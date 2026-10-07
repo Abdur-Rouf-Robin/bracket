@@ -49,6 +49,26 @@ describe('generateSingleElimination', () => {
     expect(r1).toHaveLength(4);
   });
 
+  it('draws bye recipients at random instead of always the top seeds', () => {
+    const recipients = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      const matches = generateSingleElimination(teams(7), {
+        random: () => (i * 17 + 3) % 100 / 100,
+      });
+      const byes = matches.filter((m) => m.round === 1 && m.isBye);
+      expect(byes).toHaveLength(1);
+      const placed = new Set(
+        matches
+          .filter((m) => m.round === 1)
+          .flatMap((m) => [m.homeTeamId, m.awayTeamId])
+          .filter((id): id is string => !!id),
+      );
+      expect(placed.size).toBe(7);
+      recipients.add(byes[0]!.homeTeamId ?? byes[0]!.awayTeamId!);
+    }
+    expect(recipients.size).toBeGreaterThan(1);
+  });
+
   it('adds third place match when enabled', () => {
     const matches = generateSingleElimination(teams(4), {
       breakTiesWithPlacement: true,
@@ -147,6 +167,42 @@ describe('validateSeriesResult', () => {
     expect(
       validateSeriesResult({ homeScore: 1, awayScore: 1, bestOf: 3 }).valid,
     ).toBe(false);
+  });
+});
+
+describe('computeStandings home and away', () => {
+  it('splits a double round robin into home and away records', () => {
+    const rows = computeStandings(
+      [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B' },
+      ],
+      [
+        {
+          homeTeamId: 'a',
+          awayTeamId: 'b',
+          homeScore: 2,
+          awayScore: 0,
+          winnerTeamId: 'a',
+          isDraw: false,
+          status: 'COMPLETED',
+        },
+        {
+          homeTeamId: 'b',
+          awayTeamId: 'a',
+          homeScore: 1,
+          awayScore: 1,
+          winnerTeamId: null,
+          isDraw: true,
+          status: 'COMPLETED',
+        },
+      ],
+    );
+    const a = rows.find((row) => row.teamId === 'a');
+    expect(a?.homeWins).toBe(1);
+    expect(a?.awayDraws).toBe(1);
+    expect(a?.wins).toBe(1);
+    expect(a?.draws).toBe(1);
   });
 });
 

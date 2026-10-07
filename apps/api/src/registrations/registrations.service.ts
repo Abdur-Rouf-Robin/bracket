@@ -420,6 +420,7 @@ export class RegistrationsService {
           reg.email,
           title,
           this.notifications.emailLayout(title, body, { label: 'View registration', url }),
+          { inbox: false },
         );
       }
     }
@@ -563,7 +564,7 @@ export class RegistrationsService {
     const dbUser = user
       ? await this.prisma.user.findUnique({
           where: { id: user.id },
-          select: { id: true, email: true, name: true, emailVerified: true, countryCode: true },
+          select: { id: true, email: true, name: true, username: true, emailVerified: true, countryCode: true },
         })
       : null;
 
@@ -577,6 +578,17 @@ export class RegistrationsService {
     }
 
     const email = (input.email ?? dbUser?.email ?? '').trim().toLowerCase();
+    const blocked = new Set(
+      (settings.registrationBlocklist ?? []).map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+    );
+    const identities = [email, input.teamName.trim().toLowerCase(), dbUser?.name?.trim().toLowerCase(), dbUser?.username?.trim().toLowerCase()]
+      .filter((value): value is string => !!value);
+    if (identities.some((value) => blocked.has(value))) {
+      throw new ForbiddenException({
+        message: 'This name or email is blocked from registering',
+        code: 'BLOCKED',
+      });
+    }
     if (!email) {
       throw new BadRequestException({
         message: 'Email is required',

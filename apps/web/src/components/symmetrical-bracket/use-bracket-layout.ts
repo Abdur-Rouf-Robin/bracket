@@ -35,7 +35,9 @@ const CONN_W = 36;
 const TEAM_H = 26;
 const MATCH_PAD = 4;
 const FULL_MATCH_H = TEAM_H * 2 + MATCH_PAD * 2 + 2;
-const COMPACT_MATCH_H = 34;
+const MATCH_GAP = 16;
+/** Vertical pitch of one first-round match, including the gap under it. */
+const ROW_PITCH = FULL_MATCH_H + MATCH_GAP;
 const HEADER_H = 28;
 const FOOTER_H = 72;
 const CENTER_GAP = 48;
@@ -133,14 +135,12 @@ function localPosition(round: number, position: number, round1Count: number): nu
   return position < half ? position : position - half;
 }
 
-function yForMatch(
-  round: number,
-  localPos: number,
-  unit: number,
-  blockH: number,
-): number {
-  const slot = localPos * 2 ** round + 2 ** (round - 1);
-  return HEADER_H + slot * unit - blockH / 2;
+function yForMatch(round: number, localPos: number, blockH: number): number {
+  // Center this match over the first-round matches that feed it.
+  const group = 2 ** (round - 1);
+  const start = localPos * group * ROW_PITCH;
+  const band = group * ROW_PITCH - MATCH_GAP;
+  return HEADER_H + start + band / 2 - blockH / 2;
 }
 
 export function defaultRoundLabel(
@@ -167,8 +167,8 @@ export function computeBracketLayout(matches: Match[]): BracketLayout | null {
 
   const round1Count = round1.length;
   const totalRounds = Math.max(...tree.map((m) => m.round));
-  const unit = TEAM_H + MATCH_PAD;
-  const treeHeight = round1Count * unit * 2;
+  const matchesPerWing = Math.max(1, round1Count / 2);
+  const treeHeight = matchesPerWing * ROW_PITCH - MATCH_GAP;
 
   const byId = new Map(tree.map((m) => [m.id, m]));
   const nodes: LayoutMatch[] = [];
@@ -181,8 +181,7 @@ export function computeBracketLayout(matches: Match[]): BracketLayout | null {
 
   for (const m of tree) {
     const isFinal = m.bracketSide === 'FINAL';
-    const compact = m.round > 1;
-    const blockH = compact ? COMPACT_MATCH_H : FULL_MATCH_H;
+    const blockH = FULL_MATCH_H;
 
     if (isFinal) {
       const x = centerX;
@@ -195,14 +194,14 @@ export function computeBracketLayout(matches: Match[]): BracketLayout | null {
         height: blockH,
         wing: 'center',
         round: m.round,
-        compact,
+        compact: false,
       });
       continue;
     }
 
     const wing = wingFor(m.round, m.position, round1Count);
     const localPos = localPosition(m.round, m.position, round1Count);
-    const y = yForMatch(m.round, localPos, unit, blockH);
+    const y = yForMatch(m.round, localPos, blockH);
 
     const col = m.round - 1;
     const x =
@@ -218,7 +217,7 @@ export function computeBracketLayout(matches: Match[]): BracketLayout | null {
       height: blockH,
       wing,
       round: m.round,
-      compact,
+      compact: false,
     });
   }
 

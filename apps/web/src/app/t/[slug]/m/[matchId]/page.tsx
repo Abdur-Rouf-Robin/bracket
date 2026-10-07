@@ -60,6 +60,8 @@ function statusLabel(status: string) {
     case 'IN_PROGRESS':
     case 'LIVE':
       return { text: 'Live', tone: 'text-[var(--color-ok)] border-[var(--color-ok)]/40' };
+    case 'PROVISIONAL':
+      return { text: 'Needs confirmation', tone: 'text-amber-500 border-amber-500/40' };
     case 'CANCELLED':
       return { text: 'Cancelled', tone: 'text-red-400 border-red-400/40' };
     default:
@@ -141,6 +143,7 @@ export default function MatchDetailPage() {
             isParticipant={isParticipant}
             canSelfReport={canSelfReport}
             settings={settings}
+            viewerId={user?.id}
           />
         )}
       </main>
@@ -157,6 +160,7 @@ function MatchDetail({
   isParticipant,
   canSelfReport,
   settings,
+  viewerId,
 }: {
   match: Match;
   tournament: Tournament;
@@ -166,6 +170,7 @@ function MatchDetail({
   isParticipant: boolean;
   canSelfReport: boolean;
   settings: TournamentSettings;
+  viewerId?: string;
 }) {
   const koMatches = tournament.matches.filter((x) => x.bracketSide !== 'GROUP' && x.bracketSide !== 'SWISS');
   const totalRounds = koMatches.length ? Math.max(...koMatches.map((x) => x.round)) : undefined;
@@ -243,6 +248,21 @@ function MatchDetail({
         </div>
       </header>
 
+      {token && settings.requireMatchCheckIn && match.status !== 'COMPLETED' && (canManage || isParticipant) && (
+        <CourtCheckIn match={match} slug={slug} token={token} canManage={canManage} viewerId={viewerId} />
+      )}
+
+      {token && match.status === 'PROVISIONAL' && (
+        <ScoreReview
+          match={match}
+          slug={slug}
+          token={token}
+          canManage={canManage}
+          isParticipant={isParticipant}
+          viewerId={viewerId}
+        />
+      )}
+
       {(canManage || canSelfReport) && token && !settings.setBasedScoring && (
         <PhoneScoreCard
           match={match}
@@ -251,6 +271,7 @@ function MatchDetail({
           token={token}
           when={when}
           station={station}
+          requireArrival={settings.requireMatchCheckIn === true}
         />
       )}
 
@@ -321,6 +342,169 @@ function MatchDetail({
   );
 }
 
+function CourtCheckIn({
+  match,
+  slug,
+  token,
+  canManage,
+  viewerId,
+}: {
+  match: Match;
+  slug: string;
+  token: string;
+  canManage: boolean;
+  viewerId?: string;
+}) {
+  const qc = useQueryClient();
+  const arrive = useMutation({
+    mutationFn: (side: 'home' | 'away') =>
+      api(`/matches/${match.id}/arrival`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ side, present: true }),
+      }),
+    onSuccess: async () => {
+      toast.success('Checked in');
+      await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const noShow = useMutation({
+    mutationFn: (side: 'home' | 'away') =>
+      api(`/matches/${match.id}/no-show`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ side }),
+      }),
+    onSuccess: async () => {
+      toast.success('No-show recorded as a forfeit');
+      await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const home = match.homeTeam?.name ?? 'Home';
+  const away = match.awayTeam?.name ?? 'Away';
+  const ownSide = canManage
+    ? null
+    : match.homeTeam?.registeredByUserId === viewerId
+      ? 'home'
+      : match.awayTeam?.registeredByUserId === viewerId
+        ? 'away'
+        : null;
+  return (
+    <section className="gaming-card rounded-2xl p-4 sm:p-5">
+      <h2 className="font-display text-lg font-semibold">Court check-in</h2>
+      <p className="mt-1 text-sm text-[var(--color-muted)]">Both teams confirm they are here. A no-show forfeits the match.</p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <Button type="button" variant={match.homeArrivedAt ? 'secondary' : 'primary'} disabled={!!match.homeArrivedAt || arrive.isPending || (!canManage && ownSide !== 'home')} onClick={() => arrive.mutate('home')}>
+          {match.homeArrivedAt ? `${home} is here` : `${home} has arrived`}
+        </Button>
+        <Button type="button" variant={match.awayArrivedAt ? 'secondary' : 'primary'} disabled={!!match.awayArrivedAt || arrive.isPending || (!canManage && ownSide !== 'away')} onClick={() => arrive.mutate('away')}>
+          {match.awayArrivedAt ? `${away} is here` : `${away} has arrived`}
+        </Button>
+        {canManage && (
+          <>
+            <Button type="button" variant="secondary" disabled={noShow.isPending} onClick={() => noShow.mutate('home')}>{home} no-show</Button>
+            <Button type="button" variant="secondary" disabled={noShow.isPending} onClick={() => noShow.mutate('away')}>{away} no-show</Button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ScoreReview({
+  match,
+  slug,
+  token,
+  canManage,
+  isParticipant,
+  viewerId,
+}: {
+  match: Match;
+  slug: string;
+  token: string;
+  canManage: boolean;
+  isParticipant: boolean;
+  viewerId?: string;
+}) {
+  const qc = useQueryClient();
+  const [note, setNote] = useState('');
+  const reportedByViewer = !!viewerId && match.reportedByUserId === viewerId;
+  const canAnswer = canManage || (isParticipant && !reportedByViewer);
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: ['tournament', slug] });
+  };
+  const confirm = useMutation({
+    mutationFn: () => api(`/matches/${match.id}/confirm`, { method: 'POST', token }),
+    onSuccess: async () => {
+      toast.success('Score accepted');
+      await refresh();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const reject = useMutation({
+    mutationFn: () => api(`/matches/${match.id}/result`, { method: 'DELETE', token }),
+    onSuccess: async () => {
+      toast.success('Score cleared');
+      await refresh();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const dispute = useMutation({
+    mutationFn: () =>
+      api(`/matches/${match.id}/dispute`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ note: note.trim() }),
+      }),
+    onSuccess: async () => {
+      setNote('');
+      toast.success('Dispute sent to the organizer');
+      await refresh();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  if (!canAnswer && !match.reviewNote) return null;
+  return (
+    <section className="gaming-card rounded-2xl p-4 sm:p-5">
+      <h2 className="font-display text-lg font-semibold">
+        {match.reviewStatus === 'DISPUTED' ? 'Score disputed' : 'Score waiting for confirmation'}
+      </h2>
+      <p className="mt-1 text-sm text-[var(--color-muted)]">
+        {match.homeTeam?.name ?? 'Home'} {match.homeScore ?? 0}–{match.awayScore ?? 0} {match.awayTeam?.name ?? 'Away'}
+      </p>
+      {match.reviewNote && <p className="mt-2 text-sm">{match.reviewNote}</p>}
+      {canAnswer && match.reviewStatus !== 'DISPUTED' && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" disabled={confirm.isPending} onClick={() => confirm.mutate()}>Accept score</Button>
+          {canManage && (
+            <Button type="button" variant="secondary" disabled={reject.isPending} onClick={() => reject.mutate()}>Reject score</Button>
+          )}
+        </div>
+      )}
+      {isParticipant && !reportedByViewer && match.reviewStatus !== 'DISPUTED' && (
+        <form
+          className="mt-4 flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            dispute.mutate();
+          }}
+        >
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is wrong with this score?" className="min-w-0 flex-1" />
+          <Button type="submit" variant="secondary" disabled={!note.trim() || dispute.isPending}>Dispute</Button>
+        </form>
+      )}
+      {canManage && match.reviewStatus === 'DISPUTED' && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" disabled={confirm.isPending} onClick={() => confirm.mutate()}>Accept the reported score</Button>
+          <Button type="button" variant="secondary" disabled={reject.isPending} onClick={() => reject.mutate()}>Clear the score</Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PhoneScoreCard({
   match,
   tournament,
@@ -328,6 +512,7 @@ function PhoneScoreCard({
   token,
   when,
   station,
+  requireArrival,
 }: {
   match: Match;
   tournament: Tournament;
@@ -335,6 +520,7 @@ function PhoneScoreCard({
   token: string;
   when: string | null;
   station: string | null;
+  requireArrival?: boolean;
 }) {
   const qc = useQueryClient();
   const [home, setHome] = useState(match.homeScore != null ? String(match.homeScore) : '');
@@ -346,7 +532,7 @@ function PhoneScoreCard({
   const awayName = match.awayTeam?.name ?? 'Away';
 
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (live: boolean) => {
       const roomChanged =
         court !== (station ?? '') ||
         lobbyCode !== (match.lobbyCode ?? '') ||
@@ -368,15 +554,16 @@ function PhoneScoreCard({
         body: JSON.stringify({
           homeScore: home === '' ? 0 : Number(home),
           awayScore: away === '' ? 0 : Number(away),
-          isDraw: home !== '' && home === away,
+          isDraw: !live && home !== '' && home === away,
           force: match.status === 'COMPLETED',
+          live,
           winnersOnly: false,
           playerStats: [],
         }),
       });
     },
-    onSuccess: async () => {
-      toast.success('Result saved');
+    onSuccess: async (_data, live) => {
+      toast.success(live ? 'Live score saved' : 'Result saved');
       await qc.invalidateQueries({ queryKey: ['tournament', slug] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -443,9 +630,19 @@ function PhoneScoreCard({
           />
         </label>
       </div>
-      <Button type="button" className="mt-4 h-12 w-full text-base" disabled={save.isPending || !match.homeTeamId || !match.awayTeamId} onClick={() => save.mutate()}>
-        {save.isPending ? 'Saving…' : 'Save result'}
-      </Button>
+      {requireArrival && (!match.homeArrivedAt || !match.awayArrivedAt) && (
+        <p className="mt-3 text-sm text-amber-500">Both teams must check in at the court before the score can be saved.</p>
+      )}
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {match.status !== 'COMPLETED' && (
+          <Button type="button" variant="secondary" className="h-12 text-base" disabled={save.isPending || !match.homeTeamId || !match.awayTeamId || (requireArrival && (!match.homeArrivedAt || !match.awayArrivedAt))} onClick={() => save.mutate(true)}>
+            {save.isPending ? 'Saving…' : 'Save live score'}
+          </Button>
+        )}
+        <Button type="button" className={`h-12 text-base ${match.status === 'COMPLETED' ? 'sm:col-span-2' : ''}`} disabled={save.isPending || !match.homeTeamId || !match.awayTeamId || (requireArrival && (!match.homeArrivedAt || !match.awayArrivedAt))} onClick={() => save.mutate(false)}>
+          {save.isPending ? 'Saving…' : 'Save final result'}
+        </Button>
+      </div>
     </section>
   );
 }

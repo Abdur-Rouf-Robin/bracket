@@ -12,15 +12,17 @@ export function VerifyEmailBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   if (!user || user.emailVerified !== false || dismissed) return null;
 
   async function resend() {
     setSending(true);
     try {
-      await api('/account/verification/send', { method: 'POST', token });
+      const res = await api<{ delivered?: boolean; previewUrl?: string | null }>('/account/verification/send', { method: 'POST', token });
       setSent(true);
-      toast.success(`Verification email sent to ${user?.email}`);
+      setPreviewUrl(res.previewUrl ?? null);
+      toast.success(res.delivered ? `Verification email sent to ${user?.email}` : 'Verification link is ready below');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not send verification email');
     } finally {
@@ -37,11 +39,20 @@ export function VerifyEmailBanner() {
       <div className="flex-1">
         <p className="font-semibold">Verify your email address</p>
         <p className="text-xs text-[var(--color-muted)]">
-          {user.emailConfigured === false
-            ? 'This server is not sending mail yet (no RESEND_API_KEY). Add a Resend key so verify and reset emails actually arrive.'
-            : <>We sent a link to <span className="font-medium text-[var(--color-ink)]">{user.email}</span>. Verifying unlocks notifications, registrations and password recovery.</>}
+          {previewUrl ? (
+            <>Mail is not leaving this server yet. Use the verification link, and it is also in your inbox.</>
+          ) : user.emailConfigured === false ? (
+            'Mail is kept in your inbox and on the admin mail list until an email provider is connected.'
+          ) : (
+            <>We sent a link to <span className="font-medium text-[var(--color-ink)]">{user.email}</span>. Verifying unlocks notifications, registrations and password recovery.</>
+          )}
         </p>
       </div>
+      {previewUrl && (
+        <Button size="sm" asChild>
+          <a href={previewUrl}>Verify now</a>
+        </Button>
+      )}
       <Button size="sm" variant="outline" onClick={resend} loading={sending} disabled={sent}>
         {sent ? 'Sent' : 'Resend email'}
       </Button>

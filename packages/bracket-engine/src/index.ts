@@ -138,6 +138,45 @@ function seedSlots(size: number): number[] {
   return result;
 }
 
+/**
+ * Standard seeding parks byes on the top seeds. Draw the teams who skip a
+ * round at random, and keep the remaining teams in seed order.
+ */
+function randomizeByeRecipients(
+  seeded: (EngineTeam | null)[],
+  random: () => number,
+): (EngineTeam | null)[] {
+  const byeSlots: number[] = [];
+  const playSlots: number[] = [];
+  for (let i = 0; i < seeded.length; i += 2) {
+    const home = seeded[i];
+    const away = seeded[i + 1];
+    if (home && !away) byeSlots.push(i);
+    else if (away && !home) byeSlots.push(i + 1);
+    else if (home && away) playSlots.push(i, i + 1);
+  }
+  if (!byeSlots.length) return seeded;
+
+  const teams = seeded.filter((team): team is EngineTeam => team != null);
+  const byeTeams = shuffleInPlace([...teams], random).slice(0, byeSlots.length);
+  const byeIds = new Set(byeTeams.map((team) => team.id));
+  const playing = teams
+    .filter((team) => !byeIds.has(team.id))
+    .sort(
+      (a, b) =>
+        (a.seed ?? 999) - (b.seed ?? 999) || a.name.localeCompare(b.name),
+    );
+
+  const next = [...seeded];
+  byeSlots.forEach((index, i) => {
+    next[index] = byeTeams[i] ?? null;
+  });
+  playSlots.forEach((index, i) => {
+    next[index] = playing[i] ?? null;
+  });
+  return next;
+}
+
 /** Winner stays on. Seed 1 plays seed 2; the winner faces seed 3, and so on. */
 export function generateGauntlet(teams: EngineTeam[]): GeneratedMatch[] {
   const sorted = [...teams].sort(
@@ -191,10 +230,14 @@ export function generateSingleElimination(
     Math.max(2, sorted.length, options.minBracketSize ?? 0),
   );
   const slots = seedSlots(bracketSize);
-  const seeded: (EngineTeam | null)[] =
+  const placed: (EngineTeam | null)[] =
     options.pairing === 'SEQUENTIAL'
       ? Array.from({ length: bracketSize }, (_, i) => sorted[i] ?? null)
       : slots.map((seed) => sorted[seed - 1] ?? null);
+  const seeded =
+    options.pairing === 'SEQUENTIAL'
+      ? placed
+      : randomizeByeRecipients(placed, options.random ?? Math.random);
 
   const matches: GeneratedMatch[] = [];
   const totalRounds = Math.log2(bracketSize);
@@ -1245,9 +1288,9 @@ export function resolveWinnerTeamId(input: {
   };
 }
 
-function shuffleInPlace<T>(arr: T[]): T[] {
+function shuffleInPlace<T>(arr: T[], random: () => number = Math.random): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;

@@ -31,6 +31,8 @@ enum TournamentFormat {
 enum MatchStatus {
   PENDING
   READY
+  IN_PROGRESS
+  PROVISIONAL
   COMPLETED
 }
 
@@ -235,6 +237,17 @@ model Subscription {
   cancelAtPeriodEnd    Boolean            @default(false)
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+}
+
+model OutboundMail {
+  id        String   @id @default(cuid())
+  toEmail   String
+  subject   String
+  href      String?
+  delivered Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model Notification {
@@ -750,6 +763,9 @@ model Tournament {
   event           Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
   circuitId       String?
   circuit         Circuit?          @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  circuitSeason   String?
+  circuitRegion   String?
+  circuitTier     String?
   rankingId       String?
   ranking         Ranking?          @relation(fields: [rankingId], references: [id], onDelete: SetNull)
   startedAt       DateTime?
@@ -926,6 +942,10 @@ model Match {
   placementRank      Int?
   reportedByUserId   String?
   reportedAt         DateTime?
+  homeArrivedAt      DateTime?
+  awayArrivedAt      DateTime?
+  reviewStatus       String?
+  reviewNote         String?
   mvpPlayerId        String?
   matchMeta          Json?
   mvpPlayer          TeamPlayer?        @relation("MatchMvp", fields: [mvpPlayerId], references: [id], onDelete: SetNull)
@@ -967,6 +987,12 @@ model Standing {
   adjustments   Int        @default(0)
   buchholz      Float?
   sonnebornBerger Float?
+  homeWins        Int        @default(0)
+  homeDraws       Int        @default(0)
+  homeLosses      Int        @default(0)
+  awayWins        Int        @default(0)
+  awayDraws       Int        @default(0)
+  awayLosses      Int        @default(0)
 
   @@unique([tournamentId, teamId])
   @@index([tournamentId, groupId])

@@ -39,6 +39,8 @@ export const STANDINGS_COLUMNS = [
   'NET_RUN_RATE',
   'BUCHHOLZ',
   'FAIR_PLAY',
+  'HOME',
+  'AWAY',
 ] as const;
 
 export type StandingsColumn = (typeof STANDINGS_COLUMNS)[number];
@@ -188,6 +190,16 @@ export const STANDINGS_COLUMNS_META: Record<StandingsColumn, StandingsColumnMeta
   NET_RUN_RATE: { label: 'Net run rate', short: 'NRR', description: 'Cricket net run rate.' },
   BUCHHOLZ: { label: 'Buchholz', short: 'Bh', description: 'Sum of opponents’ points.' },
   FAIR_PLAY: { label: 'Fair play', short: 'FP', description: 'Discipline points (lower is better).' },
+  HOME: {
+    label: 'Home',
+    short: 'Home',
+    description: 'Home record as wins-draws-losses.',
+  },
+  AWAY: {
+    label: 'Away',
+    short: 'Away',
+    description: 'Away record as wins-draws-losses.',
+  },
 };
 
 /** Criteria that only make sense for a given format / sport. */

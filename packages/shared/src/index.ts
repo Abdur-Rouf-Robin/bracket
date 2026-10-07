@@ -380,6 +380,8 @@ export const tournamentSettingsSchema = z.object({
         'NET_RUN_RATE',
         'BUCHHOLZ',
         'FAIR_PLAY',
+        'HOME',
+        'AWAY',
       ]),
     )
     .default([
@@ -444,6 +446,12 @@ export const tournamentSettingsSchema = z.object({
   entryFeeCents: z.number().int().min(0).max(100000000).default(0),
   currency: z.string().length(3).default('USD'),
   checkInOpensMinutesBefore: z.number().int().min(0).max(2880).default(60),
+  /** Both sides confirm they are at the court before a score can be saved. */
+  requireMatchCheckIn: z.boolean().default(false),
+  /** A participant-reported score waits for the other team or the organizer. */
+  confirmSelfReportedScores: z.boolean().default(true),
+  /** Names or emails that cannot submit the public sign-up form. */
+  registrationBlocklist: z.array(z.string().trim().min(1).max(80)).max(200).default([]),
   collectSkillLevel: z.boolean().default(false),
   enableMatchComments: z.boolean().default(true),
   participantConfirmationRequired: z.boolean().default(false),
@@ -498,6 +506,9 @@ export function rosterLimits(
     minRoster: settings.requireTeamRegistration ? starters : 0,
   };
 }
+
+/** Hosts can list a full squad. Sign-up still uses `playersPerTeam`. */
+export const ORGANIZER_ROSTER_MAX = 20;
 
 export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings =
   tournamentSettingsSchema.parse({});
@@ -705,6 +716,10 @@ export const matchResultSchema = z.object({
   isNoResult: z.boolean().optional().default(false),
   force: z.boolean().optional().default(false),
   winnersOnly: z.boolean().optional().default(false),
+  /** Save the score without a winner so the match stays live. */
+  live: z.boolean().optional(),
+  /** Organizer or the other team is accepting a provisional score. */
+  acceptProposal: z.boolean().optional(),
   isForfeit: z.boolean().optional().default(false),
   forfeitSide: z.enum(['home', 'away']).optional(),
   etHomeScore: z.number().min(0).optional().nullable(),
@@ -745,6 +760,22 @@ export const bracketPredictionSchema = z.object({
 export const checkInSchema = z.object({
   checkedIn: z.boolean(),
 });
+
+export const matchArrivalSchema = z.object({
+  side: z.enum(['home', 'away']),
+  present: z.boolean().optional().default(true),
+});
+export type MatchArrivalInput = z.infer<typeof matchArrivalSchema>;
+
+export const matchNoShowSchema = z.object({
+  side: z.enum(['home', 'away']),
+});
+export type MatchNoShowInput = z.infer<typeof matchNoShowSchema>;
+
+export const matchDisputeSchema = z.object({
+  note: z.string().trim().min(1).max(500),
+});
+export type MatchDisputeInput = z.infer<typeof matchDisputeSchema>;
 
 export const eventResultsSchema = z.object({
   eventKey: z.string().min(1),

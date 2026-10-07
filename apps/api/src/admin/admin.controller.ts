@@ -42,6 +42,11 @@ export class AdminController {
     return this.admin.stats();
   }
 
+  @Get('mail')
+  recentMail() {
+    return this.admin.recentMail();
+  }
+
   @Get('users')
   listUsers(@Query('q') q?: string) {
     return this.admin.listUsers(q);

@@ -14,7 +14,10 @@ import {
   validateSeriesResult,
 } from '@bracket/bracket-engine';
 import type {
+  MatchArrivalInput,
   MatchAttachmentInput,
+  MatchDisputeInput,
+  MatchNoShowInput,
   MatchResultInput,
   MatchScheduleInput,
 } from '@bracket/shared';
@@ -27,6 +30,7 @@ import { MvpService } from '../mvp/mvp.service';
 import { TournamentsService } from '../tournaments/tournaments.service';
 import { BracketRepairService } from '../bracket/bracket-repair.service';
 import { RankingsService } from '../rankings/rankings.service';
+import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
 export class MatchesService {
@@ -41,6 +45,7 @@ export class MatchesService {
     private readonly bracketRepair: BracketRepairService,
     private readonly rankings: RankingsService,
     private readonly access: AccessService,
+    private readonly inbox: InboxService,
   ) {}
 
   async setResult(
@@ -106,6 +111,39 @@ export class MatchesService {
           'Both teams must check in before reporting a result',
         );
       }
+    }
+
+    const isManager = userId ? await this.manages(match.tournamentId, userId) : false;
+    if (
+      settings.requireMatchCheckIn &&
+      !input.isForfeit &&
+      !input.acceptProposal &&
+      (!match.homeArrivedAt || !match.awayArrivedAt)
+    ) {
+      throw new BadRequestException(
+        'Both teams must check in at the court before a score is saved',
+      );
+    }
+
+    if (input.live) {
+      if (match.status === MatchStatus.COMPLETED) {
+        throw new BadRequestException('This match is already final');
+      }
+      const live = await this.prisma.match.update({
+        where: { id: matchId },
+        data: {
+          homeScore: input.homeScore,
+          awayScore: input.awayScore,
+          winnerTeamId: null,
+          isDraw: false,
+          isForfeit: false,
+          status: MatchStatus.IN_PROGRESS,
+        },
+        include: { homeTeam: true, awayTeam: true, winnerTeam: true },
+      });
+      this.realtime.emitMatchUpdated(match.tournamentId, live);
+      this.realtime.emitBracketUpdated(match.tournamentId);
+      return live;
     }
 
     let homeScore = input.homeScore;
@@ -268,6 +306,51 @@ export class MatchesService {
       throw new BadRequestException('Provide a winner or mark as draw');
     }
 
+    const acceptingProposal =
+      !!input.acceptProposal &&
+      (isManager || (!!userId && userId !== match.reportedByUserId));
+    if (
+      userId &&
+      !isManager &&
+      settings.confirmSelfReportedScores !== false &&
+      !acceptingProposal &&
+      !input.live &&
+      !input.isForfeit
+    ) {
+      const proposed = await this.prisma.match.update({
+        where: { id: matchId },
+        data: {
+          homeScore,
+          awayScore,
+          winnerTeamId: resolved.winnerTeamId,
+          isDraw: resolved.isDraw,
+          isForfeit: false,
+          status: MatchStatus.PROVISIONAL,
+          reviewStatus: 'PENDING',
+          reviewNote: null,
+          reportedByUserId: userId,
+          reportedAt: new Date(),
+        },
+        include: { homeTeam: true, awayTeam: true, winnerTeam: true, tournament: { select: { slug: true, name: true, createdById: true } } },
+      });
+      const opponentId =
+        proposed.homeTeam?.registeredByUserId === userId
+          ? proposed.awayTeam?.registeredByUserId
+          : proposed.homeTeam?.registeredByUserId;
+      const href = `/t/${proposed.tournament.slug}/m/${proposed.id}`;
+      if (opponentId) {
+        await this.inbox.notify(opponentId, {
+          type: 'score_proposed',
+          title: `Confirm the score in ${proposed.tournament.name}`,
+          body: `${proposed.homeTeam?.name ?? 'Home'} ${homeScore}–${awayScore} ${proposed.awayTeam?.name ?? 'Away'} is waiting for you.`,
+          href,
+        });
+      }
+      this.realtime.emitMatchUpdated(match.tournamentId, proposed);
+      this.realtime.emitBracketUpdated(match.tournamentId);
+      return proposed;
+    }
+
     const updated = await this.prisma.match.update({
       where: { id: matchId },
       data: {
@@ -292,6 +375,10 @@ export class MatchesService {
         homeSetsWon: setData?.homeSetsWon ?? null,
         awaySetsWon: setData?.awaySetsWon ?? null,
         status: MatchStatus.COMPLETED,
+        reviewStatus: null,
+        reviewNote: null,
+        reportedByUserId: userId,
+        reportedAt: new Date(),
       },
       include: {
         homeTeam: true,
@@ -453,6 +540,27 @@ export class MatchesService {
     });
     if (!match) throw new NotFoundException('Match not found');
     await this.tournaments.requireManage(match.tournamentId, userId);
+    if (match.status === MatchStatus.PROVISIONAL) {
+      const cleared = await this.prisma.match.update({
+        where: { id: matchId },
+        data: {
+          homeScore: null,
+          awayScore: null,
+          winnerTeamId: null,
+          isDraw: false,
+          isForfeit: false,
+          reviewStatus: null,
+          reviewNote: null,
+          reportedByUserId: null,
+          reportedAt: null,
+          status: match.homeTeamId && match.awayTeamId ? MatchStatus.READY : MatchStatus.PENDING,
+        },
+        include: { homeTeam: true, awayTeam: true, winnerTeam: true },
+      });
+      this.realtime.emitMatchUpdated(match.tournamentId, cleared);
+      this.realtime.emitBracketUpdated(match.tournamentId);
+      return cleared;
+    }
     if (match.status !== MatchStatus.COMPLETED) {
       throw new BadRequestException('Match is not completed');
     }
@@ -580,6 +688,124 @@ export class MatchesService {
         attachmentName: input.attachmentName ?? null,
       },
     });
+  }
+
+  async setArrival(matchId: string, userId: string, input: MatchArrivalInput) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    const manager = await this.manages(match.tournamentId, userId);
+    const team = input.side === 'home' ? match.homeTeam : match.awayTeam;
+    if (!manager && team?.registeredByUserId !== userId) {
+      throw new ForbiddenException('You can only check in your own team');
+    }
+    const updated = await this.prisma.match.update({
+      where: { id: matchId },
+      data: input.side === 'home'
+        ? { homeArrivedAt: input.present ? new Date() : null }
+        : { awayArrivedAt: input.present ? new Date() : null },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    this.realtime.emitMatchUpdated(match.tournamentId, updated);
+    return updated;
+  }
+
+  async noShow(matchId: string, userId: string, input: MatchNoShowInput) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, tournamentId: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    await this.tournaments.requireManage(match.tournamentId, userId);
+    return this.setResult(matchId, userId, {
+      isForfeit: true,
+      forfeitSide: input.side,
+      homeScore: 0,
+      awayScore: 0,
+      isDraw: false,
+      isNoResult: false,
+      force: false,
+      winnersOnly: false,
+      playerStats: [],
+    });
+  }
+
+  async confirmProposal(matchId: string, userId: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    if (match.status !== MatchStatus.PROVISIONAL) {
+      throw new BadRequestException('This score is not waiting for confirmation');
+    }
+    const manager = await this.manages(match.tournamentId, userId);
+    if (match.reviewStatus === 'DISPUTED' && !manager) {
+      throw new BadRequestException('A disputed score has to be decided by the organizer');
+    }
+    const onTeam =
+      match.homeTeam?.registeredByUserId === userId ||
+      match.awayTeam?.registeredByUserId === userId;
+    if (!manager && (!onTeam || userId === match.reportedByUserId)) {
+      throw new ForbiddenException('The other team confirms this score');
+    }
+    return this.setResult(matchId, userId, {
+      homeScore: match.homeScore ?? 0,
+      awayScore: match.awayScore ?? 0,
+      winnerTeamId: match.winnerTeamId,
+      isDraw: match.isDraw,
+      isNoResult: false,
+      isForfeit: false,
+      acceptProposal: true,
+      force: true,
+      winnersOnly: false,
+      playerStats: [],
+    });
+  }
+
+  async dispute(matchId: string, userId: string, input: MatchDisputeInput) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        tournament: { select: { slug: true, name: true, createdById: true } },
+      },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    if (match.status !== MatchStatus.PROVISIONAL) {
+      throw new BadRequestException('Only a proposed score can be disputed');
+    }
+    const onTeam =
+      match.homeTeam?.registeredByUserId === userId ||
+      match.awayTeam?.registeredByUserId === userId;
+    if (!onTeam || userId === match.reportedByUserId) {
+      throw new ForbiddenException('The other team disputes this score');
+    }
+    const updated = await this.prisma.match.update({
+      where: { id: matchId },
+      data: { reviewStatus: 'DISPUTED', reviewNote: input.note.trim() },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    await this.inbox.notify(match.tournament.createdById, {
+      type: 'score_disputed',
+      title: `Score disputed in ${match.tournament.name}`,
+      body: input.note.trim(),
+      href: `/t/${match.tournament.slug}/m/${match.id}`,
+    });
+    this.realtime.emitMatchUpdated(match.tournamentId, updated);
+    return updated;
+  }
+
+  private async manages(tournamentId: string, userId: string) {
+    try {
+      await this.tournaments.requireManage(tournamentId, userId);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async assertTeamCanReport(

@@ -64,6 +64,12 @@ export interface StandingRow {
   sonnebornBerger?: number;
   /** Last five results, oldest first. */
   form?: FormResult[];
+  homeWins?: number;
+  homeDraws?: number;
+  homeLosses?: number;
+  awayWins?: number;
+  awayDraws?: number;
+  awayLosses?: number;
 }
 
 export interface MatchResultLike {
@@ -126,4 +132,6 @@ export interface GenerateOptions {
   minBracketSize?: number;
   /** TRADITIONAL uses standard seeding. SEQUENTIAL pairs the list in order (1v2, 3v4). */
   pairing?: 'TRADITIONAL' | 'SEQUENTIAL';
+  /** Source of randomness for who receives a bye. Defaults to Math.random. */
+  random?: () => number;
 }

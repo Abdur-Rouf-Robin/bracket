@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   attachCircuitTournamentSchema,
+  classifyCircuitTournamentSchema,
   createCircuitSchema,
   type AttachCircuitTournamentInput,
+  type ClassifyCircuitTournamentInput,
   type CreateCircuitInput,
 } from '@bracket/shared';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -22,8 +24,13 @@ export class CircuitsController {
   }
 
   @Get(':slug')
-  getBySlug(@Param('slug') slug: string) {
-    return this.circuits.getBySlug(slug);
+  getBySlug(
+    @Param('slug') slug: string,
+    @Query('season') season?: string,
+    @Query('region') region?: string,
+    @Query('tier') tier?: string,
+  ) {
+    return this.circuits.getBySlug(slug, { season, region, tier });
   }
 
   @ApiBearerAuth()
@@ -44,6 +51,18 @@ export class CircuitsController {
     @CurrentUser() user: { id: string },
     @Body(new ZodValidationPipe(attachCircuitTournamentSchema)) body: AttachCircuitTournamentInput,
   ) {
-    return this.circuits.attach(id, body.tournamentId, user.id);
+    return this.circuits.attach(id, body, user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/tournaments/:tournamentId')
+  classify(
+    @Param('id') id: string,
+    @Param('tournamentId') tournamentId: string,
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(classifyCircuitTournamentSchema)) body: ClassifyCircuitTournamentInput,
+  ) {
+    return this.circuits.classify(id, tournamentId, body, user.id);
   }
 }

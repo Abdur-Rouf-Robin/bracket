@@ -351,6 +351,7 @@ export default function AdminPage() {
 
         {tab === 'overview' && (
           <section className="space-y-6">
+            <UndeliveredMail token={token} />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Users', stats?.users],
@@ -742,5 +743,44 @@ export default function AdminPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function UndeliveredMail({ token }: { token: string | null }) {
+  const { data = [] } = useQuery({
+    queryKey: ['admin-mail'],
+    enabled: !!token,
+    queryFn: () =>
+      api<{ id: string; toEmail: string; subject: string; href: string | null; createdAt: string }[]>(
+        '/admin/mail',
+        { token },
+      ),
+  });
+  return (
+    <article className="gaming-card rounded-xl p-5">
+      <h2 className="font-display text-lg font-bold">Undelivered mail</h2>
+      <p className="mt-1 text-sm text-[var(--color-muted)]">
+        Verification and password-reset links stay here until an email provider is connected.
+      </p>
+      {data.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--color-muted)]">No undelivered messages.</p>
+      ) : (
+        <ul className="mt-3 space-y-2 text-sm">
+          {data.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--color-line)] py-2">
+              <span>
+                <span className="font-medium">{row.subject}</span>
+                <span className="ml-2 text-[var(--color-muted)]">{row.toEmail}</span>
+              </span>
+              {row.href && (
+                <a className="text-[var(--color-accent)]" href={row.href}>
+                  Open link
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }

@@ -34,8 +34,12 @@ function teamLabel(m: Match, side: 'home' | 'away', showSeed = false) {
 }
 
 /** "6-4 3-6 7-5" for set-based matches, otherwise the plain score. */
+function showsScore(status: string) {
+  return status === 'COMPLETED' || status === 'IN_PROGRESS' || status === 'PROVISIONAL';
+}
+
 export function formatMatchScore(m: Match): string {
-  if (m.status !== 'COMPLETED') return '—';
+  if (!showsScore(m.status)) return '—';
   if (m.sets && m.sets.length) {
     return m.sets.map((s) => `${s.home}-${s.away}`).join(' ');
   }
@@ -320,7 +324,7 @@ function KnockoutMatchCard({
           {teamLabel(m, 'home', showSeeds)}
         </span>
         <span className="tabular-nums text-[var(--color-muted)]">
-          {m.status === 'COMPLETED' ? m.homeScore : ''}
+          {showsScore(m.status) ? m.homeScore : ''}
         </span>
       </div>
       <div className="mt-1.5 flex justify-between gap-2 border-t border-[var(--color-line)] pt-1.5 text-sm">
@@ -334,7 +338,7 @@ function KnockoutMatchCard({
           {teamLabel(m, 'away', showSeeds)}
         </span>
         <span className="tabular-nums text-[var(--color-muted)]">
-          {m.status === 'COMPLETED' ? m.awayScore : ''}
+          {showsScore(m.status) ? m.awayScore : ''}
         </span>
       </div>
       {m.status === 'COMPLETED' && m.sets && m.sets.length > 0 && (
@@ -772,6 +776,10 @@ function resolveColumns(input: {
       if (!cols.includes('BUCHHOLZ')) cols.push('BUCHHOLZ');
     }
     if (hasAdjustments) cols.push('ADJUSTMENTS');
+    if ((settings.meetingsPerPair ?? 1) > 1) {
+      const at = cols.indexOf('POINTS');
+      cols.splice(at === -1 ? cols.length : at, 0, 'HOME', 'AWAY');
+    }
   }
   if (!cols.includes('RANK')) cols = ['RANK', ...cols];
   if (!cols.includes('TEAM')) cols.splice(1, 0, 'TEAM');
@@ -929,6 +937,18 @@ export function StandingsTable({
         return s.draws;
       case 'LOSSES':
         return s.losses;
+      case 'HOME':
+        return (
+          <span className="tabular-nums" title="Home wins-draws-losses">
+            {s.homeWins ?? 0}-{s.homeDraws ?? 0}-{s.homeLosses ?? 0}
+          </span>
+        );
+      case 'AWAY':
+        return (
+          <span className="tabular-nums" title="Away wins-draws-losses">
+            {s.awayWins ?? 0}-{s.awayDraws ?? 0}-{s.awayLosses ?? 0}
+          </span>
+        );
       case 'SCORE_FOR':
         return s.pointsFor;
       case 'SCORE_AGAINST':

@@ -41,6 +41,13 @@ export class BillingController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @Post('premier-request')
+  requestPremier(@CurrentUser() user: { id: string }) {
+    return this.billing.requestPremier(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post('portal')
   portal(@CurrentUser() user: { id: string }) {
     return this.billing.portal(user.id);

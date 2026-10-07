@@ -45,6 +45,7 @@ import {
   hashSeed,
   profileForGameName,
   rosterLimits,
+  ORGANIZER_ROSTER_MAX,
   suggestFormatPlans,
   tournamentSettingsSchema,
 } from '@bracket/shared';
@@ -861,7 +862,6 @@ export class TournamentsService {
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
     const settings = tournamentSettingsSchema.parse(tournament.settings ?? {});
-    const limits = rosterLimits(settings);
 
     const team = await this.prisma.team.findFirst({
       where: { id: teamId, tournamentId: id },
@@ -929,27 +929,15 @@ export class TournamentsService {
 
         if (!p.id && p.name?.trim()) {
           const count = await this.prisma.teamPlayer.count({ where: { teamId } });
-          if (count >= limits.maxRoster) {
+          if (count >= ORGANIZER_ROSTER_MAX) {
             throw new BadRequestException(
-              settings.allowSubstitutes
-                ? `Maximum ${limits.maxRoster} players (${limits.starters} starters + ${limits.substituteSlots} subs)`
-                : `Maximum ${limits.maxRoster} players per team`,
+              `Maximum ${ORGANIZER_ROSTER_MAX} players per team`,
             );
           }
           const isSub = p.isSub === true;
           if (isSub && !settings.allowSubstitutes) {
             throw new BadRequestException(
               'Substitute players are not enabled for this tournament',
-            );
-          }
-          const starterCount = await this.prisma.teamPlayer.count({
-            where: { teamId, isSub: false },
-          });
-          if (!isSub && starterCount >= limits.starters) {
-            throw new BadRequestException(
-              settings.allowSubstitutes
-                ? `Starter limit is ${limits.starters} — mark extra players as substitutes`
-                : `Starter limit is ${limits.starters}`,
             );
           }
           if (p.isCaptain) {

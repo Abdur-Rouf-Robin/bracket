@@ -17,6 +17,21 @@ function BillingPanel() {
   const { token } = useAuth();
   const { data: me, isLoading } = useBillingMe();
   const plan = me?.plan === 'PREMIER' ? PLANS.PREMIER : PLANS.FREE;
+  const requestPremier = useMutation({
+    mutationFn: () =>
+      api<{ configured: boolean; notified?: number }>('/billing/premier-request', {
+        method: 'POST',
+        token,
+      }),
+    onSuccess: (res) => {
+      toast.success(
+        res.notified
+          ? 'Request sent. A site admin can grant Premier from the admin page.'
+          : 'Request saved. A site admin grants Premier from Admin → Plans.',
+      );
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
   const checkout = useMutation({
     mutationFn: () =>
       api<CheckoutResponse>('/billing/checkout', {
@@ -65,8 +80,11 @@ function BillingPanel() {
         </dl>
         <div className="mt-6 flex flex-wrap gap-3">
           {me?.plan !== 'PREMIER' && (
-            <Button disabled={checkout.isPending} onClick={() => checkout.mutate()}>
-              Upgrade to Premier
+            <Button
+              disabled={checkout.isPending || requestPremier.isPending}
+              onClick={() => (me?.configured ? checkout.mutate() : requestPremier.mutate())}
+            >
+              {me?.configured ? 'Upgrade to Premier' : 'Request Premier'}
             </Button>
           )}
           <Button variant="secondary" asChild>

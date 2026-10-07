@@ -10,12 +10,15 @@ export function TeamBadge({
   size = 'md',
   compact = false,
   showSeed = false,
+  onDark = false,
 }: {
   team: Team | null | undefined;
   size?: 'sm' | 'md' | 'lg';
   compact?: boolean;
   /** Prefix the name with the seed number (honours `hideSeedNumbers` upstream). */
   showSeed?: boolean;
+  /** Bracket cards are always dark, even when the rest of the site is light. */
+  onDark?: boolean;
 }) {
   const name = team?.name ?? 'TBD';
   const bg = teamColor(team ?? { id: '', name, seed: null, groupId: null, poolColor: null });
@@ -32,9 +35,15 @@ export function TeamBadge({
         {team ? teamInitials(name) : '?'}
       </div>
       {!compact && (
-        <span className="truncate text-[11px] font-medium leading-tight text-[var(--color-ink)]">
+        <span
+          className={`truncate text-[11px] font-medium leading-tight ${
+            onDark ? 'text-[#e8eaef]' : 'text-[var(--color-ink)]'
+          }`}
+        >
           {showSeed && team?.seed != null && (
-            <span className="mr-1 text-[9px] text-[var(--color-muted)]">{team.seed}</span>
+            <span className={`mr-1 text-[9px] ${onDark ? 'text-[#9aa3b5]' : 'text-[var(--color-muted)]'}`}>
+              {team.seed}
+            </span>
           )}
           {name}
         </span>

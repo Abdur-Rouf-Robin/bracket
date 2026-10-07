@@ -182,6 +182,33 @@ export class BillingService {
     return { url: session.url };
   }
 
+  async requestPremier(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, plan: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (this.isConfigured()) {
+      return { ok: true, configured: true as const };
+    }
+    const admins = await this.prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+    if (admins.length) {
+      await this.prisma.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          type: 'premier_request',
+          title: 'Premier upgrade request',
+          body: `${user.name} (${user.email}) asked for Premier. Grant it from Admin → Plans.`,
+          href: '/admin',
+        })),
+      });
+    }
+    return { ok: true, configured: false as const, notified: admins.length };
+  }
+
   async grantPlan(input: AdminGrantPlanInput) {
     const user = await this.prisma.user.findUnique({
       where: { id: input.userId },

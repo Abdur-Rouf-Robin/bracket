@@ -18,7 +18,19 @@ export const createCircuitSchema = z.object({
 });
 export type CreateCircuitInput = z.infer<typeof createCircuitSchema>;
 
+const circuitLabel = z.string().trim().min(1).max(40).nullable().optional();
+
 export const attachCircuitTournamentSchema = z.object({
   tournamentId: z.string().min(1),
+  season: circuitLabel,
+  region: circuitLabel,
+  tier: circuitLabel,
 });
 export type AttachCircuitTournamentInput = z.infer<typeof attachCircuitTournamentSchema>;
+
+export const classifyCircuitTournamentSchema = z.object({
+  season: circuitLabel,
+  region: circuitLabel,
+  tier: circuitLabel,
+});
+export type ClassifyCircuitTournamentInput = z.infer<typeof classifyCircuitTournamentSchema>;
