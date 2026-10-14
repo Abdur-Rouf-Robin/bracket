@@ -132,6 +132,8 @@ export const matchSlotSchema = z.object({
   station: z.string().trim().max(80).optional().nullable(),
   lobbyCode: z.string().trim().max(80).optional().nullable(),
   lobbyUrl: z.string().trim().max(500).optional().nullable(),
+  mapName: z.string().trim().max(80).optional().nullable(),
+  gameMode: z.string().trim().max(80).optional().nullable(),
   /** When true, return clashes for the proposed slot and do not write. */
   preview: z.boolean().optional(),
 });

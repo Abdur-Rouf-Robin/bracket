@@ -94,7 +94,7 @@ export class AccountService {
   ) {}
 
   emailConfigured() {
-    return !!this.config.get<string>('RESEND_API_KEY');
+    return this.notifications.isConfigured();
   }
 
   private async mustChangePassword(userId: string, passwordHash?: string) {

@@ -1002,3 +1002,4 @@ export * from './registration';
 export * from './sharing';
 export * from './billing';
 export * from './account';
+export * from './stages';

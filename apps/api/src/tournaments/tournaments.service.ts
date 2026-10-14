@@ -289,20 +289,23 @@ export class TournamentsService {
       throw new BadRequestException('Format is required');
     }
 
-    if (settings.requireCheckIn) {
-      const unchecked = t.teams.filter((team) => !team.checkedIn);
-      if (unchecked.length > 0) {
-        throw new BadRequestException(
-          `${unchecked.length} team(s) not checked in — check in all participants before generating`,
-        );
-      }
+    const eligible = t.teams.filter((team) => !team.withdrawn);
+    const field = settings.requireCheckIn
+      ? eligible.filter((team) => team.checkedIn)
+      : eligible;
+    if (field.length < 2) {
+      throw new BadRequestException(
+        settings.requireCheckIn
+          ? `${field.length} team(s) are checked in. At least 2 must check in. Teams that skip check-in are left out of the bracket.`
+          : 'Add at least two participants',
+      );
     }
 
     await this.prisma.match.deleteMany({ where: { tournamentId: id } });
     await this.prisma.standing.deleteMany({ where: { tournamentId: id } });
     await this.prisma.eventResult.deleteMany({ where: { tournamentId: id } });
 
-    const orderedTeams = [...t.teams].sort((a, b) => {
+    const orderedTeams = [...field].sort((a, b) => {
       if (settings.seedingMode === 'LIST_ORDER') {
         return a.createdAt.getTime() - b.createdAt.getTime();
       }
@@ -333,7 +336,7 @@ export class TournamentsService {
       format === 'DOUBLE_ELIMINATION' && settings.splitParticipantsStartInLosers
         ? losersStartSource.filter((teamId) => teamById.has(teamId))
         : [];
-    if (splitLosersIds.length && splitLosersIds.length >= t.teams.length) {
+    if (splitLosersIds.length && splitLosersIds.length >= field.length) {
       throw new BadRequestException(
         'At least one participant must start in the winners bracket',
       );
@@ -1124,8 +1127,8 @@ export class TournamentsService {
           { position: 'asc' as const },
         ],
         include: {
-          homeTeam: true,
-          awayTeam: true,
+          homeTeam: { include: { players: { orderBy: { order: 'asc' as const } } } },
+          awayTeam: { include: { players: { orderBy: { order: 'asc' as const } } } },
           winnerTeam: true,
           mvpPlayer: { include: { team: true } },
           playerStats: {

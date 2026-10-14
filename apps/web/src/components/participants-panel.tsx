@@ -3,6 +3,7 @@
 import type { Team, Tournament } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CheckInStatus } from '@bracket/shared';
 
@@ -68,9 +69,12 @@ export function ParticipantsPanel({
 
   if (!teams.length) {
     return (
-      <p className="text-sm text-[var(--color-muted)]">
-        No participants yet.
-      </p>
+      <div className="space-y-4">
+        {canManage && token && (
+          <SavedSquadTools tournamentId={tournament.id} slug={slug} token={token} teams={teams} />
+        )}
+        <p className="text-sm text-[var(--color-muted)]">No participants yet.</p>
+      </div>
     );
   }
 
@@ -79,6 +83,10 @@ export function ParticipantsPanel({
     !!myTeam && !myTeam.checkedIn && !myTeam.withdrawn && (!checkIn || checkIn.isOpenNow);
 
   return (
+    <div className="space-y-4">
+      {canManage && token && (
+        <SavedSquadTools tournamentId={tournament.id} slug={slug} token={token} teams={teams} />
+      )}
     <div className="overflow-x-auto rounded-xl border border-[var(--color-line)]">
       {requireCheckIn && (
         <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-[var(--color-surface)]/40 px-4 py-2.5 text-xs">
@@ -182,6 +190,105 @@ export function ParticipantsPanel({
           Check-in for your team opens {checkIn.opensAt ? formatWhen(checkIn.opensAt) : 'later'}.
         </p>
       )}
+    </div>
+    </div>
+  );
+}
+
+function SavedSquadTools({
+  tournamentId,
+  slug,
+  token,
+  teams,
+}: {
+  tournamentId: string;
+  slug?: string;
+  token: string;
+  teams: Team[];
+}) {
+  const qc = useQueryClient();
+  const [squadId, setSquadId] = useState('');
+  const [saveFrom, setSaveFrom] = useState(teams[0]?.id ?? '');
+  const [message, setMessage] = useState('');
+  const squads = useQuery({
+    queryKey: ['squads'],
+    queryFn: () =>
+      api<{ id: string; name: string; players: { name: string }[] }[]>('/squads', { token }),
+  });
+
+  const useSquad = useMutation({
+    mutationFn: () =>
+      api(`/squads/${squadId}/use/${tournamentId}`, { method: 'POST', token }),
+    onSuccess: () => {
+      setMessage('Team added from your saved squad.');
+      if (slug) qc.invalidateQueries({ queryKey: ['tournament', slug] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
+  const saveSquad = useMutation({
+    mutationFn: () => {
+      const team = teams.find((item) => item.id === saveFrom);
+      if (!team) throw new Error('Pick a team');
+      return api('/squads', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          name: team.name,
+          players: (team.players ?? []).map((player) => player.name),
+        }),
+      });
+    },
+    onSuccess: () => {
+      setMessage('Saved. You can add this squad to the next tournament.');
+      qc.invalidateQueries({ queryKey: ['squads'] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
+  return (
+    <div className="rounded-xl border border-[var(--color-line)] p-4">
+      <p className="text-sm font-medium">Reusable squads</p>
+      <p className="mt-1 text-xs text-[var(--color-muted)]">
+        Save a team once, then drop that same roster into another tournament.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <select
+          className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-surface)] px-2 text-sm"
+          value={squadId}
+          onChange={(e) => setSquadId(e.target.value)}
+        >
+          <option value="">Saved squads</option>
+          {(squads.data ?? []).map((squad) => (
+            <option key={squad.id} value={squad.id}>
+              {squad.name}
+              {squad.players.length ? ` (${squad.players.length})` : ''}
+            </option>
+          ))}
+        </select>
+        <Button type="button" disabled={!squadId || useSquad.isPending} onClick={() => useSquad.mutate()}>
+          Add to this tournament
+        </Button>
+      </div>
+      {teams.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <select
+            className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-surface)] px-2 text-sm"
+            value={saveFrom}
+            onChange={(e) => setSaveFrom(e.target.value)}
+          >
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="secondary" disabled={saveSquad.isPending} onClick={() => saveSquad.mutate()}>
+            Save this team
+          </Button>
+        </div>
+      )}
+      {message && <p className="mt-2 text-xs text-[var(--color-muted)]">{message}</p>}
     </div>
   );
 }

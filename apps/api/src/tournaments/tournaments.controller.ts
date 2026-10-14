@@ -38,13 +38,16 @@ import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { TournamentsService } from './tournaments.service';
+import { StagesService } from './stages.service';
 import { MvpService } from '../mvp/mvp.service';
+import { createStageSchema, type CreateStageInput } from '@bracket/shared';
 
 @ApiTags('tournaments')
 @Controller()
 export class TournamentsController {
   constructor(
     private readonly tournaments: TournamentsService,
+    private readonly stages: StagesService,
     private readonly jwt: JwtService,
     private readonly mvp: MvpService,
   ) {}
@@ -288,5 +291,45 @@ export class TournamentsController {
     @CurrentUser() user: { id: string },
   ) {
     return this.tournaments.reopen(id, user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('tournaments/:id/stages')
+  stagesOf(@Param('id') id: string) {
+    return this.stages.list(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/stages')
+  addStage(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(createStageSchema)) body: CreateStageInput,
+  ) {
+    return this.stages.create(id, user.id, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete('tournaments/:id/stages/:stageId')
+  removeStage(
+    @Param('id') id: string,
+    @Param('stageId') stageId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.stages.remove(id, user.id, stageId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('tournaments/:id/stages/:stageId/open')
+  openStage(
+    @Param('id') id: string,
+    @Param('stageId') stageId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.stages.open(id, user.id, stageId);
   }
 }

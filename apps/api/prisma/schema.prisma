@@ -180,6 +180,7 @@ model User {
   communityAnnouncements CommunityAnnouncement[]
   ownedEvents   Event[]           @relation("OwnedEvents")
   ownedCircuits Circuit[]         @relation("OwnedCircuits")
+  savedSquads   SavedSquad[]
   eventAdminOf  EventAdmin[]
   eventOrders   EventOrder[]
   templates     TournamentTemplate[]
@@ -344,7 +345,9 @@ model Community {
   templates     TournamentTemplate[]
   webhooks      Webhook[]
   circuits      Circuit[]
-  customDomain  String?                 @unique
+  customDomain     String? @unique
+  domainStatus     String  @default("NONE")
+  domainResolvedIp String?
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
@@ -777,6 +780,7 @@ model Tournament {
   groups          Group[]
   teams           Team[]
   matches         Match[]
+  stages          TournamentStage[]
   standings       Standing[]
   eventResults    EventResult[]
   announcements   Announcement[]
@@ -931,6 +935,10 @@ model Match {
   station            String?
   lobbyCode          String?
   lobbyUrl           String?
+  mapName            String?
+  gameMode           String?
+  stageId            String?
+  stage              TournamentStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   stationId          String?
   stationRef         Station?    @relation(fields: [stationId], references: [id], onDelete: SetNull)
   refereeId          String?
@@ -963,6 +971,45 @@ model Match {
   @@index([tournamentId, scheduledAt])
   @@index([stationId])
   @@index([refereeId])
+  @@index([stageId])
+}
+
+model TournamentStage {
+  id           String           @id @default(cuid())
+  tournamentId String
+  tournament   Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  order        Int
+  name         String
+  format       TournamentFormat
+  advanceCount Int?
+  status       String           @default("PENDING")
+  matches      Match[]
+  createdAt    DateTime         @default(now())
+
+  @@unique([tournamentId, order])
+  @@index([tournamentId])
+}
+
+model SavedSquad {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  players   SavedSquadPlayer[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([userId])
+}
+
+model SavedSquadPlayer {
+  id      String     @id @default(cuid())
+  squadId String
+  squad   SavedSquad @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  name    String
+  order   Int        @default(0)
+
+  @@index([squadId])
 }
 
 model Standing {

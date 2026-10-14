@@ -69,6 +69,18 @@ function playersForTeam(team?: { players?: Array<{ id: string; name: string }> }
   return team?.players ?? [];
 }
 
+/** Match cards do not always nest the squad. The tournament team list does. */
+function withRoster<T extends { id: string; players?: Array<{ id: string; name: string }> } | null | undefined>(
+  team: T,
+  tournament: { teams?: Array<{ id: string; players?: Array<{ id: string; name: string }> }> } | null,
+): T {
+  if (!team) return team;
+  if (team.players?.length) return team;
+  const listed = tournament?.teams?.find((item) => item.id === team.id);
+  if (!listed?.players?.length) return team;
+  return { ...team, players: listed.players };
+}
+
 function playerOptions(
   players: Array<{ id: string; name: string }>,
   excludeId?: string | null,
@@ -97,6 +109,8 @@ export function CricketScoreboardPanel(props: Props) {
   const standalone = isStandalone(props);
   const match = standalone ? null : props.match;
   const tournament = standalone ? null : props.tournament;
+  const homeSquad = standalone ? null : withRoster(match!.homeTeam, tournament);
+  const awaySquad = standalone ? null : withRoster(match!.awayTeam, tournament);
   const token = standalone ? props.editToken : props.token;
   const canEdit = props.canEdit;
   const slug = standalone ? props.slug : props.tournament.slug;
@@ -185,8 +199,8 @@ export function CricketScoreboardPanel(props: Props) {
         ? { players: board?.homeRoster ?? [] }
         : { players: board?.awayRoster ?? [] };
     }
-    return match!.homeTeamId === battingTeamId ? match!.homeTeam : match!.awayTeam;
-  }, [standalone, battingSide, board, battingTeamId, match]);
+    return match!.homeTeamId === battingTeamId ? homeSquad : awaySquad;
+  }, [standalone, battingSide, board, battingTeamId, match, homeSquad, awaySquad]);
 
   const bowlingTeam = useMemo(() => {
     if (standalone) {
@@ -194,8 +208,8 @@ export function CricketScoreboardPanel(props: Props) {
         ? { players: board?.awayRoster ?? [] }
         : { players: board?.homeRoster ?? [] };
     }
-    return match!.homeTeamId === bowlingTeamId ? match!.homeTeam : match!.awayTeam;
-  }, [standalone, battingSide, board, bowlingTeamId, match]);
+    return match!.homeTeamId === bowlingTeamId ? homeSquad : awaySquad;
+  }, [standalone, battingSide, board, bowlingTeamId, match, homeSquad, awaySquad]);
 
   const activeInnings = board?.innings.find(
     (i) => i.status === CricketInningsStatus.IN_PROGRESS,
@@ -225,9 +239,9 @@ export function CricketScoreboardPanel(props: Props) {
         : board?.awayRoster ?? [];
     }
     return activeInnings.battingTeamId === match!.homeTeamId
-      ? match!.homeTeam?.players ?? []
-      : match!.awayTeam?.players ?? [];
-  }, [activeInnings, standalone, board, match]);
+      ? homeSquad?.players ?? []
+      : awaySquad?.players ?? [];
+  }, [activeInnings, standalone, board, match, homeSquad, awaySquad]);
 
   const activeBowlingRoster = useMemo(() => {
     if (!activeInnings) return [];
@@ -237,9 +251,9 @@ export function CricketScoreboardPanel(props: Props) {
         : board?.awayRoster ?? [];
     }
     return activeInnings.bowlingTeamId === match!.homeTeamId
-      ? match!.homeTeam?.players ?? []
-      : match!.awayTeam?.players ?? [];
-  }, [activeInnings, standalone, board, match]);
+      ? homeSquad?.players ?? []
+      : awaySquad?.players ?? [];
+  }, [activeInnings, standalone, board, match, homeSquad, awaySquad]);
 
   const bowlerLimitSettings = useMemo((): BowlerLimitSettings | undefined => {
     if (!board) return undefined;
@@ -527,10 +541,10 @@ export function CricketScoreboardPanel(props: Props) {
 
   const homeHasPlayers = standalone
     ? (board?.homeRoster?.length ?? 0) > 0
-    : (match?.homeTeam?.players?.length ?? 0) > 0;
+    : (homeSquad?.players?.length ?? 0) > 0;
   const awayHasPlayers = standalone
     ? (board?.awayRoster?.length ?? 0) > 0
-    : (match?.awayTeam?.players?.length ?? 0) > 0;
+    : (awaySquad?.players?.length ?? 0) > 0;
   const needsSquads = !standalone && canEdit && (!homeHasPlayers || !awayHasPlayers);
 
   const ensureSquadsMut = useMutation({
@@ -568,7 +582,7 @@ export function CricketScoreboardPanel(props: Props) {
         };
       }
       if (!match) return { id, players: [] };
-      return id === match.homeTeamId ? match.homeTeam : match.awayTeam;
+      return id === match.homeTeamId ? homeSquad : awaySquad;
     };
     if (superDone.length >= 1) {
       const firstSo = superDone[0]!;
@@ -588,7 +602,7 @@ export function CricketScoreboardPanel(props: Props) {
       };
     }
     return null;
-  }, [board, match, standalone]);
+  }, [board, match, standalone, homeSquad, awaySquad]);
 
   function recordRuns(runsOffBat: number) {
     ballMut.mutate({ runsOffBat, extraType: 'NONE', extraRuns: 0, isWicket: false });

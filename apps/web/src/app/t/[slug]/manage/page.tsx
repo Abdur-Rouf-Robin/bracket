@@ -6,8 +6,9 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GitBranch, MoreHorizontal, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { SiteHeader } from '@/components/site-header';
+import { StagesPanel } from '@/components/stages-panel';
 import { SiteFooter } from '@/components/site-footer';
+import { SiteHeader } from '@/components/site-header';
 import { TournamentHero, TournamentStageStepper } from '@/components/tournament-hero';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +36,7 @@ import { useAuth } from '@/lib/auth';
 import type { Tournament } from '@/lib/types';
 import { useTournamentLive } from '@/lib/use-tournament-live';
 import { buildNavItems, parseTournamentNav } from '@/lib/tournament-nav';
+import { useLocale } from '@/lib/locale';
 import { hasKnockoutPhase } from '@/lib/tournament-stats';
 import {
   type AnySharePayload,
@@ -47,6 +49,7 @@ export default function ManageTournamentPage() {
   const slug = params.slug;
   const searchParams = useSearchParams();
   const { user, token, loading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -208,6 +211,10 @@ export default function ManageTournamentPage() {
         isOwner: !!data.isOwner,
         canManage: !!data.canManage,
         canConfigure: data.canConfigure !== false,
+        label: (key, fallback) => {
+          const value = t(key);
+          return value === key ? fallback : value;
+        },
       })
     : [];
 
@@ -307,6 +314,9 @@ export default function ManageTournamentPage() {
               <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href="/circuits">Add to a circuit</Link>
               <Link className="rounded-full border border-[var(--color-line)] px-3 py-1" href="/communities">Community</Link>
             </div>
+            {token && data.canConfigure !== false && (
+              <StagesPanel tournamentId={data.id} slug={data.slug} token={token} />
+            )}
 
             <TournamentSectionNav
               basePath={basePath}

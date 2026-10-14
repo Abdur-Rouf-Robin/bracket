@@ -281,8 +281,12 @@ export function ManageCommunitySettings({
             className="mt-1"
           />
           <p className="mt-1 text-xs text-[var(--color-muted)]">
-            Point this hostname at Bracket. Visitors to the bare domain land on this community.
+            Point this hostname at this server, save, then check DNS. HTTPS is issued on the server with
+            deploy/enable-custom-domain.sh after the name resolves here.
           </p>
+          {token && community.id && (
+            <DomainCheck communityId={community.id} token={token} status={community.domainStatus} />
+          )}
         </div>
       </section>
 
@@ -292,6 +296,45 @@ export function ManageCommunitySettings({
         </Button>
       </div>
     </form>
+  );
+}
+
+function DomainCheck({
+  communityId,
+  token,
+  status,
+}: {
+  communityId: string;
+  token: string;
+  status?: string | null;
+}) {
+  const [result, setResult] = useState<string>(status ?? '');
+  const check = useMutation({
+    mutationFn: () =>
+      api<{ ok: boolean; status: string; addresses: string[]; expected: string | null }>(
+        `/communities/${communityId}/domain/verify`,
+        { method: 'POST', token },
+      ),
+    onSuccess: (data) => {
+      const where = data.addresses.length ? data.addresses.join(', ') : 'no address';
+      setResult(
+        data.ok
+          ? `DNS points here (${where}). On the server run deploy/enable-custom-domain.sh for HTTPS.`
+          : data.status === 'DNS_MISSING'
+            ? 'This name does not resolve yet.'
+            : `Resolves to ${where}${data.expected ? `, expected ${data.expected}` : ''}.`,
+      );
+    },
+    onError: (err: Error) => setResult(err.message),
+  });
+
+  return (
+    <div className="mt-3">
+      <Button type="button" variant="secondary" disabled={check.isPending} onClick={() => check.mutate()}>
+        Check DNS
+      </Button>
+      {result && <p className="mt-2 text-xs text-[var(--color-muted)]">{result}</p>}
+    </div>
   );
 }
 

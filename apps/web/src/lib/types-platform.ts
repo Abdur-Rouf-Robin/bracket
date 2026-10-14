@@ -38,6 +38,8 @@ export type Community = {
   bannerUrl?: string | null;
   websiteUrl?: string | null;
   customDomain?: string | null;
+  domainStatus?: string | null;
+  domainResolvedIp?: string | null;
   location?: string | null;
   countryCode?: string | null;
   audience: string[];

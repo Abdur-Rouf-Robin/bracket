@@ -15,7 +15,7 @@ const dmSans = DM_Sans({
   display: 'swap',
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bracket.arrobin.com';
 const DESCRIPTION =
   'Run any tournament. Brackets, schedules, live results — single & double elimination, round robin, Swiss, groups + knockout, leaderboards and racing formats.';
 

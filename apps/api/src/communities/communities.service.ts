@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { promises as dns } from 'dns';
 import { CommunityRole, Prisma } from '@prisma/client';
 import {
   slugifyCommunityName,
@@ -232,6 +233,9 @@ export class CommunitiesService {
           input.customDomain !== undefined
             ? await this.claimDomain(id, input.customDomain)
             : undefined,
+        ...(input.customDomain !== undefined
+          ? { domainStatus: 'NONE', domainResolvedIp: null }
+          : {}),
       },
       include: { games: { include: { game: { select: gameSelect } } } },
     });
@@ -856,6 +860,32 @@ export class CommunitiesService {
       data: { communityId: null, rankingId: null },
     });
     return { ok: true };
+  }
+
+  async verifyDomain(id: string, userId: string) {
+    await this.access.requireCommunityRole(id, userId, 'ADMIN');
+    const community = await this.prisma.community.findUnique({ where: { id } });
+    if (!community?.customDomain) {
+      throw new BadRequestException('Save a domain before checking DNS');
+    }
+    const expected = process.env.SERVER_PUBLIC_IP?.trim() || null;
+    let addresses: string[] = [];
+    try {
+      addresses = await dns.resolve4(community.customDomain);
+    } catch {
+      await this.prisma.community.update({
+        where: { id },
+        data: { domainStatus: 'DNS_MISSING', domainResolvedIp: null },
+      });
+      return { ok: false, status: 'DNS_MISSING', addresses, expected };
+    }
+    const ok = expected ? addresses.includes(expected) : addresses.length > 0;
+    const status = ok ? 'DNS_OK' : 'DNS_OTHER';
+    await this.prisma.community.update({
+      where: { id },
+      data: { domainStatus: status, domainResolvedIp: addresses[0] ?? null },
+    });
+    return { ok, status, addresses, expected };
   }
 }
 

@@ -87,6 +87,13 @@ export class CommunitiesController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @Post(':id/domain/verify')
+  verifyDomain(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.communities.verifyDomain(id, user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.communities.remove(id, user.id);

@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/auth';
 import type { Tournament } from '@/lib/types';
 import type { TournamentMvpRow } from '@bracket/shared';
 import { buildNavItems, parseTournamentNav } from '@/lib/tournament-nav';
+import { useLocale } from '@/lib/locale';
 import { hasKnockoutPhase } from '@/lib/tournament-stats';
 import { useTournamentLive } from '@/lib/use-tournament-live';
 import { SearchX } from 'lucide-react';
@@ -28,6 +29,7 @@ export default function PublicTournamentPage() {
   const slug = params.slug;
   const searchParams = useSearchParams();
   const { user, token } = useAuth();
+  const { t } = useLocale();
   const qc = useQueryClient();
   const basePath = `/t/${slug}`;
 
@@ -75,6 +77,10 @@ export default function PublicTournamentPage() {
         showStandings: settings?.showStandings !== false,
         isOwner: !!data.isOwner,
         canManage: !!data.canManage,
+        label: (key, fallback) => {
+          const value = t(key);
+          return value === key ? fallback : value;
+        },
       })
     : [];
 

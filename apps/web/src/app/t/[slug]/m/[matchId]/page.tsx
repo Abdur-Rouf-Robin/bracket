@@ -233,6 +233,8 @@ function MatchDetail({
                 </span>
               )}
               {match.lobbyCode && <span>Room {match.lobbyCode}</span>}
+              {match.mapName && <span>Map {match.mapName}</span>}
+              {match.gameMode && <span>Mode {match.gameMode}</span>}
               {match.lobbyUrl && (
                 <a href={match.lobbyUrl} className="underline" target="_blank" rel="noreferrer">
                   Open lobby
@@ -528,6 +530,8 @@ function PhoneScoreCard({
   const [court, setCourt] = useState(station ?? '');
   const [lobbyCode, setLobbyCode] = useState(match.lobbyCode ?? '');
   const [lobbyUrl, setLobbyUrl] = useState(match.lobbyUrl ?? '');
+  const [mapName, setMapName] = useState(match.mapName ?? '');
+  const [gameMode, setGameMode] = useState(match.gameMode ?? '');
   const homeName = match.homeTeam?.name ?? 'Home';
   const awayName = match.awayTeam?.name ?? 'Away';
 
@@ -536,7 +540,9 @@ function PhoneScoreCard({
       const roomChanged =
         court !== (station ?? '') ||
         lobbyCode !== (match.lobbyCode ?? '') ||
-        lobbyUrl !== (match.lobbyUrl ?? '');
+        lobbyUrl !== (match.lobbyUrl ?? '') ||
+        mapName !== (match.mapName ?? '') ||
+        gameMode !== (match.gameMode ?? '');
       if (roomChanged) {
         await api(`/tournaments/${tournament.id}/matches/${match.id}/slot`, {
           method: 'PATCH',
@@ -545,6 +551,8 @@ function PhoneScoreCard({
             station: court.trim() || null,
             lobbyCode: lobbyCode.trim() || null,
             lobbyUrl: lobbyUrl.trim() || null,
+            mapName: mapName.trim() || null,
+            gameMode: gameMode.trim() || null,
           }),
         });
       }
@@ -603,6 +611,26 @@ function PhoneScoreCard({
             value={lobbyUrl}
             onChange={(e) => setLobbyUrl(e.target.value)}
             placeholder="https://"
+            className="mt-1"
+          />
+        </label>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          Map
+          <Input
+            value={mapName}
+            onChange={(e) => setMapName(e.target.value)}
+            placeholder="Dust2, track, court"
+            className="mt-1"
+          />
+        </label>
+        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          Mode
+          <Input
+            value={gameMode}
+            onChange={(e) => setGameMode(e.target.value)}
+            placeholder="Bo3, MR12, knockout"
             className="mt-1"
           />
         </label>

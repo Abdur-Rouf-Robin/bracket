@@ -41,7 +41,9 @@ export class HealthController {
       service: 'bracket-api',
       db,
       redis,
-      email: !!this.config.get<string>('RESEND_API_KEY'),
+      email:
+        !!this.config.get<string>('RESEND_API_KEY') ||
+        !!this.config.get<string>('SMTP_HOST')?.trim(),
       appUrl: (this.config.get<string>('APP_URL') ?? '').replace(/\/$/, '') || null,
       backupLastAt: this.lastBackupAt(),
     };

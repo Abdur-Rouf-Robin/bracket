@@ -874,6 +874,12 @@ export class SchedulingService {
       }
       data.lobbyUrl = url;
     }
+    if (input.mapName !== undefined) {
+      data.mapName = input.mapName?.trim() || null;
+    }
+    if (input.gameMode !== undefined) {
+      data.gameMode = input.gameMode?.trim() || null;
+    }
     if (input.refereeId !== undefined) {
       if (input.refereeId) {
         const ref = await this.prisma.referee.findFirst({

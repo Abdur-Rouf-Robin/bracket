@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import nodemailer from 'nodemailer';
 import { InboxService } from '../inbox/inbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../developer/webhooks.service';
@@ -137,7 +138,41 @@ export class NotificationsService {
       }
     }
     const apiKey = this.config.get<string>('RESEND_API_KEY');
-    const from = this.config.get<string>('EMAIL_FROM') ?? 'Bracket <onboarding@resend.dev>';
+    const from =
+      this.config.get<string>('SMTP_FROM') ??
+      this.config.get<string>('EMAIL_FROM') ??
+      'Bracket <onboarding@resend.dev>';
+
+    const smtpHost = this.config.get<string>('SMTP_HOST')?.trim();
+    if (smtpHost) {
+      const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+      const secure = this.config.get<string>('SMTP_SECURE') === 'true';
+      const user = this.config.get<string>('SMTP_USER')?.trim();
+      const pass = this.config.get<string>('SMTP_PASS');
+      const localSink = this.isLocalDiscardSink(smtpHost, port);
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port,
+          secure,
+          auth: user ? { user, pass: pass ?? '' } : undefined,
+        });
+        await transporter.sendMail({ from, to, subject, html });
+        if (localSink) {
+          this.logger.warn(
+            `SMTP ${smtpHost}:${port} accepted mail for ${to} and discarded it. Gmail will not receive it.`,
+          );
+          await this.rememberMail(to, subject, href, false);
+          return { delivered: false, mode: 'smtp' as const, href };
+        }
+        await this.rememberMail(to, subject, href, true);
+        return { delivered: true, mode: 'smtp' as const, href };
+      } catch (err) {
+        this.logger.warn(`SMTP error: ${(err as Error).message}`);
+        await this.rememberMail(to, subject, href, false);
+        return { delivered: false, mode: 'smtp' as const, href };
+      }
+    }
 
     if (apiKey) {
       try {
@@ -185,6 +220,11 @@ export class NotificationsService {
   }
 
   isConfigured() {
-    return !!this.config.get<string>('RESEND_API_KEY');
+    return !!this.config.get<string>('RESEND_API_KEY') || !!this.config.get<string>('SMTP_HOST')?.trim();
+  }
+
+  /** VMS local catcher accepts SMTP and then drops the message. */
+  private isLocalDiscardSink(host: string, port: number) {
+    return (host === '127.0.0.1' || host === 'localhost') && port === 1025;
   }
 }

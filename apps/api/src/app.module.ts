@@ -27,6 +27,7 @@ import { BillingModule } from './billing/billing.module';
 import { DeveloperModule } from './developer/developer.module';
 import { InboxModule } from './inbox/inbox.module';
 import { AccountModule } from './account/account.module';
+import { SquadsModule } from './squads/squads.module';
 
 const redisEnabled = process.env.REDIS_ENABLED === 'true';
 
@@ -52,6 +53,7 @@ const redisEnabled = process.env.REDIS_ENABLED === 'true';
     CommonModule,
     AuthModule,
     AccountModule,
+    SquadsModule,
     CommunitiesModule,
     RankingsModule,
     TemplatesModule,

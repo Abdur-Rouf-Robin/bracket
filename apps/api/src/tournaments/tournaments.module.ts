@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TournamentsController } from './tournaments.controller';
 import { TournamentExtrasController } from './tournament-extras.controller';
 import { TournamentsService } from './tournaments.service';
+import { StagesService } from './stages.service';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { AuthModule } from '../auth/auth.module';
@@ -21,7 +22,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ShareImagesModule,
   ],
   controllers: [TournamentsController, TournamentExtrasController],
-  providers: [TournamentsService],
+  providers: [TournamentsService, StagesService],
   exports: [TournamentsService],
 })
 export class TournamentsModule {}

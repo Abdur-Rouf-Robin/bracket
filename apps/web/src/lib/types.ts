@@ -80,6 +80,8 @@ export type Match = {
   station?: string | null;
   lobbyCode?: string | null;
   lobbyUrl?: string | null;
+  mapName?: string | null;
+  gameMode?: string | null;
   stationId?: string | null;
   stationRef?: { id: string; name: string } | null;
   refereeId?: string | null;

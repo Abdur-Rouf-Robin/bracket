@@ -59,12 +59,14 @@ export const CREATE_LINKS: NavLink[] = [
   { label: 'Community', href: '/communities/new', description: 'Your club, league or org', icon: <Users className="size-4" /> },
   { label: 'Event', href: '/events/new', description: 'Multi-tournament events & tickets', icon: <CalendarDays className="size-4" /> },
   { label: 'Quick bracket', href: '/bracket-generator', description: 'No account needed', icon: <Zap className="size-4" /> },
-  { label: 'Cricket scoreboard', href: '/sports/cricket/free/new', description: 'Ball-by-ball, no tournament needed', icon: <ClipboardList className="size-4" /> },
+];
+
+export const SCOREBOARD_LINKS: NavLink[] = [
+  { label: 'New scoreboard', href: '/sports/cricket/free/new', description: 'Ball-by-ball, no tournament needed', icon: <ClipboardList className="size-4" /> },
+  { label: 'Cricket hub', href: '/sports/cricket', description: 'T20, ODI, Test and The Hundred', icon: <CircleDot className="size-4" /> },
 ];
 
 export const SPORTS_LINKS: NavLink[] = [
-  { label: 'Cricket scoreboard', href: '/sports/cricket/free/new', description: 'Start a free live board', icon: <ClipboardList className="size-4" /> },
-  { label: 'Cricket hub', href: '/sports/cricket', description: 'T20, ODI, Test & The Hundred', icon: <CircleDot className="size-4" /> },
   { label: 'Football', href: '/sports/football', description: 'Goals, ET and penalties', icon: <Goal className="size-4" /> },
 ];
 
@@ -92,6 +94,7 @@ const FIND_LINKS: NavLink[] = [
 
 const NAV_GROUPS: NavGroup[] = [
   { label: 'Create', items: CREATE_LINKS },
+  { label: 'Scoreboard', items: SCOREBOARD_LINKS },
 ];
 
 const TOP_LINKS: NavLink[] = [
@@ -298,6 +301,7 @@ function MobileDrawer({ loggedIn, isAdmin }: { loggedIn: boolean; isAdmin: boole
               ...(isAdmin ? [{ label: 'Admin', href: '/admin', icon: <Shield className="size-4" /> }] : []),
             ])}
           {section('Create', CREATE_LINKS)}
+          {section(t('nav.scoreboard'), SCOREBOARD_LINKS)}
           {section('Find', FIND_LINKS)}
           {section('More', [
             { label: 'Pricing', href: '/pricing', icon: <CreditCard className="size-4" /> },
@@ -358,6 +362,7 @@ export function SiteHeader({ className }: { className?: string }) {
 
         <nav aria-label="Primary" className="hidden items-center gap-0.5 lg:flex">
           <NavDropdown group={{ ...NAV_GROUPS[0]!, label: t('nav.create') }} />
+          <NavDropdown group={{ ...NAV_GROUPS[1]!, label: t('nav.scoreboard') }} />
           {TOP_LINKS.map((l) => {
             const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (

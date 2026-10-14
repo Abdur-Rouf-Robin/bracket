@@ -143,50 +143,52 @@ export function buildNavItems(opts: {
   canManage: boolean;
   /** False for score editors: they can run matches, not change structure or fees. */
   canConfigure?: boolean;
+  label?: (key: string, fallback: string) => string;
 }): NavItem[] {
+  const L = (key: string, fallback: string) => opts.label?.(key, fallback) ?? fallback;
   const teamSubs: { id: string; label: string }[] = [
-    { id: 'participants', label: 'Participants' },
-    { id: 'rosters', label: 'Team rosters' },
+    { id: 'participants', label: L('manage.participants', 'Participants') },
+    { id: 'rosters', label: L('manage.rosters', 'Team rosters') },
   ];
   if (opts.canManage && opts.mode === 'manage') {
-    teamSubs.push({ id: 'team-settings', label: 'Team settings' });
+    teamSubs.push({ id: 'team-settings', label: L('manage.teamSettings', 'Team settings') });
   }
 
   const bracketSubs: { id: string; label: string }[] = [
-    { id: 'full', label: 'Full bracket' },
+    { id: 'full', label: L('manage.full', 'Full bracket') },
   ];
   if (opts.hasKnockout) {
-    bracketSubs.push({ id: 'knockout', label: 'Knockout stage' });
+    bracketSubs.push({ id: 'knockout', label: L('manage.knockout', 'Knockout stage') });
   }
 
   const statsSubs: { id: string; label: string }[] = [
-    { id: 'teams', label: 'Team performance' },
+    { id: 'teams', label: L('manage.teamPerformance', 'Team performance') },
   ];
   if (opts.showMvp) {
-    statsSubs.push({ id: 'leaderboard', label: 'MVP leaderboard' });
+    statsSubs.push({ id: 'leaderboard', label: L('manage.mvp', 'MVP leaderboard') });
   }
   if (opts.hasKnockout) {
-    statsSubs.push({ id: 'knockout', label: 'Knockout stats' });
+    statsSubs.push({ id: 'knockout', label: L('manage.knockoutStats', 'Knockout stats') });
   }
 
   const playerSubs: { id: string; label: string }[] = [
-    { id: 'all', label: 'All players' },
-    { id: 'by-team', label: 'By team' },
-    { id: 'performance', label: 'Performance' },
+    { id: 'all', label: L('manage.allPlayers', 'All players') },
+    { id: 'by-team', label: L('manage.byTeam', 'By team') },
+    { id: 'performance', label: L('manage.performance', 'Performance') },
   ];
   if (opts.canManage && opts.mode === 'manage') {
-    playerSubs.push({ id: 'edit', label: 'Edit rosters' });
+    playerSubs.push({ id: 'edit', label: L('manage.editRosters', 'Edit rosters') });
   }
 
   const scheduleSubs: { id: string; label: string }[] = [
-    { id: 'calendar', label: 'Calendar' },
-    { id: 'stations', label: 'Stations' },
-    { id: 'queue', label: 'Station queue' },
+    { id: 'calendar', label: L('manage.calendar', 'Calendar') },
+    { id: 'stations', label: L('manage.stations', 'Stations') },
+    { id: 'queue', label: L('manage.queue', 'Station queue') },
   ];
   if (opts.canManage && opts.mode === 'manage') {
     scheduleSubs.push(
-      { id: 'referees', label: 'Referees' },
-      { id: 'generate', label: 'Auto-schedule' },
+      { id: 'referees', label: L('manage.referees', 'Referees') },
+      { id: 'generate', label: L('manage.autoSchedule', 'Auto-schedule') },
     );
   }
 
@@ -194,84 +196,84 @@ export function buildNavItems(opts: {
     const items: NavItem[] = [
       {
         id: 'bracket',
-        label: 'Bracket',
+        label: L('manage.bracket', 'Bracket'),
         subs: bracketSubs.length > 1 ? bracketSubs : undefined,
       },
-      { id: 'teams', label: 'Participants' },
-      { id: 'matches', label: 'Matches' },
+      { id: 'teams', label: L('manage.participants', 'Participants') },
+      { id: 'matches', label: L('manage.matches', 'Matches') },
     ];
     if (opts.showStandings) {
-      items.push({ id: 'standings', label: 'Standings' });
+      items.push({ id: 'standings', label: L('manage.standings', 'Standings') });
     }
     items.push({
       id: 'schedule',
-      label: 'Schedule',
+      label: L('manage.schedule', 'Schedule'),
       subs: [
-        { id: 'calendar', label: 'Calendar' },
-        { id: 'stations', label: 'Stations' },
-        { id: 'queue', label: 'Station queue' },
+        { id: 'calendar', label: L('manage.calendar', 'Calendar') },
+        { id: 'stations', label: L('manage.stations', 'Stations') },
+        { id: 'queue', label: L('manage.queue', 'Station queue') },
       ],
     });
     return items;
   }
 
   const items: NavItem[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'teams', label: 'Teams', subs: teamSubs },
-    { id: 'players', label: 'Players', subs: playerSubs },
-    { id: 'bracket', label: 'Bracket', subs: bracketSubs },
+    { id: 'overview', label: L('manage.overview', 'Overview') },
+    { id: 'teams', label: L('manage.teams', 'Teams'), subs: teamSubs },
+    { id: 'players', label: L('manage.players', 'Players'), subs: playerSubs },
+    { id: 'bracket', label: L('manage.bracket', 'Bracket'), subs: bracketSubs },
     opts.canManage
       ? {
           id: 'matches',
-          label: 'Matches',
+          label: L('manage.matches', 'Matches'),
           subs: [
-            { id: 'play', label: 'Play' },
-            { id: 'schedule', label: 'All matches' },
+            { id: 'play', label: L('manage.play', 'Play') },
+            { id: 'schedule', label: L('manage.allMatches', 'All matches') },
           ],
         }
-      : { id: 'matches', label: 'Matches' },
-    { id: 'schedule', label: 'Schedule', subs: scheduleSubs },
+      : { id: 'matches', label: L('manage.matches', 'Matches') },
+    { id: 'schedule', label: L('manage.schedule', 'Schedule'), subs: scheduleSubs },
   ];
 
   if (opts.showStandings) {
-    items.push({ id: 'standings', label: 'Standings' });
+    items.push({ id: 'standings', label: L('manage.standings', 'Standings') });
   }
 
-  items.push({ id: 'stats', label: 'Stats', subs: statsSubs });
+  items.push({ id: 'stats', label: L('manage.stats', 'Stats'), subs: statsSubs });
 
   if (opts.mode === 'manage' && opts.canManage && opts.canConfigure !== false) {
     items.push({
       id: 'registrations',
-      label: 'Registrations',
+      label: L('manage.registrations', 'Registrations'),
       subs: [
-        { id: 'pending', label: 'Pending' },
-        { id: 'approved', label: 'Approved' },
-        { id: 'waitlist', label: 'Waitlist' },
-        { id: 'rejected', label: 'Rejected' },
-        { id: 'form', label: 'Sign-up form' },
+        { id: 'pending', label: L('manage.pending', 'Pending') },
+        { id: 'approved', label: L('manage.approved', 'Approved') },
+        { id: 'waitlist', label: L('manage.waitlist', 'Waitlist') },
+        { id: 'rejected', label: L('manage.rejected', 'Rejected') },
+        { id: 'form', label: L('manage.signup', 'Sign-up form') },
       ],
     });
 
     const settingsSubs: { id: string; label: string }[] = [
-      { id: 'venue', label: 'Venue & hosting' },
-      { id: 'rosters', label: 'Edit rosters' },
+      { id: 'venue', label: L('manage.venue', 'Venue & hosting') },
+      { id: 'rosters', label: L('manage.editRosters', 'Edit rosters') },
     ];
     if (opts.isOwner) {
       settingsSubs.push(
-        { id: 'tournament', label: 'Tournament settings' },
-        { id: 'standings', label: 'Standings & scoring' },
-        { id: 'registration', label: 'Registration' },
-        { id: 'branding', label: 'Branding' },
-        { id: 'sharing', label: 'Sharing & embed' },
-        { id: 'integrations', label: 'Integrations' },
-        { id: 'media', label: 'Share images' },
+        { id: 'tournament', label: L('manage.tournament', 'Tournament settings') },
+        { id: 'standings', label: L('manage.scoring', 'Standings & scoring') },
+        { id: 'registration', label: L('manage.registration', 'Registration') },
+        { id: 'branding', label: L('manage.branding', 'Branding') },
+        { id: 'sharing', label: L('manage.sharing', 'Sharing & embed') },
+        { id: 'integrations', label: L('manage.integrations', 'Integrations') },
+        { id: 'media', label: L('manage.media', 'Share images') },
       );
     }
-    settingsSubs.push({ id: 'tools', label: 'Tools' });
+    settingsSubs.push({ id: 'tools', label: L('manage.tools', 'Tools') });
     if (opts.isOwner) {
-      settingsSubs.push({ id: 'danger', label: 'Advanced' });
+      settingsSubs.push({ id: 'danger', label: L('manage.advanced', 'Advanced') });
     }
-    items.push({ id: 'settings', label: 'Settings', subs: settingsSubs });
+    items.push({ id: 'settings', label: L('manage.settings', 'Settings'), subs: settingsSubs });
   }
 
   return items;
